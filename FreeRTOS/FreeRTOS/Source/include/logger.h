@@ -20,4 +20,12 @@ typedef struct {
     LoggerEventType_t eEventType;
 } LoggerEntry_t;
 
+void vLoggerInit(void);
+
+
+void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType);
+
+
+void vLoggerPrint(void);
+
 #endif
