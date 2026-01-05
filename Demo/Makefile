@@ -91,12 +91,14 @@ LDFLAGS += -mcpu=$(CPU) -mthumb
 # Kernel files
 SOURCE_FILES += $(KERNEL_DIR)/list.c
 SOURCE_FILES += $(KERNEL_DIR)/tasks.c
+SOURCE_FILES += $(KERNEL_DIR)/queue.c #added
 SOURCE_FILES += $(KERNEL_DIR)/portable/MemMang/heap_4.c
 SOURCE_FILES += $(KERNEL_DIR)/portable/GCC/ARM_CM3/port.c
 
 # Demo files
 SOURCE_FILES += $(DEMO_PROJECT)/main.c
 SOURCE_FILES += $(DEMO_PROJECT)/uart.c
+SOURCE_FILES += $(DEMO_PROJECT)/logger.c #added
 
 # Start-up code
 SOURCE_FILES += ./startup.c

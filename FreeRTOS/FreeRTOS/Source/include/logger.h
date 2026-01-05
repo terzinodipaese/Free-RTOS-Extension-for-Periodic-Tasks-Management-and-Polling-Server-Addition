@@ -4,9 +4,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define LOGGER_BUFFER_SIZE 1024
+#define LOGGER_BUFFER_SIZE 100
+#define LOGGER_PRINT_PERIOD_MS 500
 
-static TickType_t ulIdleTicks = 0;
 
 typedef enum {
     LOGGER_TASK_RELEASE,
@@ -22,17 +22,18 @@ typedef struct {
     TickType_t ulTimestamp;
     LoggerEventType_t eEventType;
     TickType_t ulDeadline; 
+    // generic field
 } LoggerEntry_t;
 
 void vLoggerInit(void);
 
 
-void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType);
+void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, TickType_t ulValue);
 
 
 void vLoggerPrint(void);
 
 
-//void vLoggerTask(void *pvParameters);
+void vLoggerTask(void *pvParameters);
 
 #endif

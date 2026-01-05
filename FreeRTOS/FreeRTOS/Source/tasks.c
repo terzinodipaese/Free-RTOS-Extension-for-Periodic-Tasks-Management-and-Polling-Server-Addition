@@ -40,6 +40,7 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
+#include "logger.h"
 
 /* The default definitions are only available for non-MPU ports. The
  * reason is that the stack alignment requirements vary for different
@@ -1757,9 +1758,19 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
         TickType_t last = xTaskGetTickCount();
 
+        const char *pcName = pcTaskGetName(NULL);
+        TickType_t xDeadline = cfg.deadline;
+
+        vLoggerStore(pcName, LOGGER_TASK_RELEASE, 0);
+
         for (;;)
         {
+            vLoggerStore(pcName, LOGGER_TASK_START, 0);
+
             cfg.fn(cfg.param);                      /*Call the original function with the original parameters */
+
+            vLoggerStore(pcName, LOGGER_TASK_END, 0);
+
             vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
         }
     }
