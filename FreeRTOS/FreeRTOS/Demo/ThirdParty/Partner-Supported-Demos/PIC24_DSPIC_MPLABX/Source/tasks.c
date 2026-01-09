@@ -2737,6 +2737,7 @@ BaseType_t xTaskIncrementTick( void )
     /* Called by the portable layer each time a tick interrupt occurs.
      * Increments the tick then checks to see if the new tick value will cause any
      * tasks to be unblocked. */
+    // TO-DO: add code here for deadlines
     traceTASK_INCREMENT_TICK( xTickCount );
 
     if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )

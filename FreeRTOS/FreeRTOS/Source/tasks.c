@@ -396,6 +396,11 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
     TickType_t xPeriod;                         /**< Task period PEOS */
     TickType_t xDeadline;                       /**< Task deadline PEOS */
 
+    TickType_t xNextRelease;                    /**< When the periodic task is going to be released next */
+    TickType_t xNextDeadline;                   /**< The next deadline of the periodic task */
+
+    BaseType_t xIsPeriodic;                     /**< Flag for periodic task */
+
     #if ( configUSE_TASK_PREEMPTION_DISABLE == 1 )
         BaseType_t xPreemptionDisable; /**< Used to prevent the task from being preempted. */
     #endif
@@ -482,6 +487,9 @@ PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Po
 PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /**< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
+PRIVILEGED_DATA static List_t pxPeriodicTasksList;                       /**< List of all periodic tasks */
+PRIVILEGED_DATA static TickType_t xNextPeriodicEventTick = portMAX_DELAY;/**< Tracking the next time the periodic scheduler needs to do something */
+
 #if ( INCLUDE_vTaskDelete == 1 )
 
     PRIVILEGED_DATA static List_t xTasksWaitingTermination; /**< Tasks that have been deleted - but their memory not yet freed. */
@@ -544,6 +552,9 @@ PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime[ conf
 /*-----------------------------------------------------------*/
 
 /* File private functions. --------------------------------*/
+
+static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount ) PRIVILEGED_FUNCTION;
+static void prvUpdateNextPeriodicEventTick( void ) PRIVILEGED_FUNCTION;
 
 /*
  * Creates the idle tasks during scheduler start.
@@ -1748,19 +1759,28 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         void *param;            /*< Original parameter*/
         TickType_t period;      /*< Period */
         TickType_t deadline;    /*< Deadline */
+        /* Runtime State (Required for the Patch) */
+        TaskHandle_t pxTaskHandle;   /* The handle of the task we created */
+        TickType_t xNextRelease;    /* The absolute tick for next release */
+        TickType_t xNextDeadline;   /* The absolute tick for next deadline */
+        UBaseType_t uxPriority;     /* Store priority for yield checks */
+        configSTACK_DEPTH_TYPE uxStackDepth; /* Store stack depth for child tasks */
+        ListItem_t xPeriodicListItem; /* Dedicated item for pxPeriodicTasksList */
     } PeriodicWrap_t;
 
     static void vPeriodicWrapperTask(void *pvParameters)
     {
-        PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
-        vPortFree(pvParameters);                 // free small helper struct
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
+        // vPortFree(pvParameters);                 // free small helper struct // we actually need this
+
 
         TickType_t last = xTaskGetTickCount();
 
         for (;;)
         {
-            cfg.fn(cfg.param);                      /*Call the original function with the original parameters */
-            vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
+            pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
+            // vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
+            vTaskSuspend(NULL);                  /*Suspend itself, the scheduler patch will resume it at the right time*/
         }
     }
 
@@ -1784,12 +1804,38 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         cfg->period = xPeriod;
         cfg->deadline = xDeadline;
 
-        return xTaskCreate(vPeriodicWrapperTask,
-                        pcName,
-                        uxStackDepth,
-                        cfg,           /*Important! in this param also the pointer to the original function and it's param*/
-                        uxPriority,
-                        pxCreatedTask);
+        /* Initialize the list item so it can be inserted into the shadow list */
+        vListInitialiseItem( &( cfg->xPeriodicListItem ) );
+        listSET_LIST_ITEM_OWNER( &( cfg->xPeriodicListItem ), cfg );
+
+        BaseType_t xReturn = xTaskCreate(vPeriodicWrapperTask, pcName, uxStackDepth, cfg, uxPriority, &(cfg->pxTaskHandle));
+
+        // return xTaskCreate(vPeriodicWrapperTask,
+        //                 pcName,
+        //                 uxStackDepth,
+        //                 cfg,           /*Important! in this param also the pointer to the original function and it's param*/
+        //                 uxPriority,
+        //                 pxCreatedTask);
+        if( xReturn == pdPASS )
+        {
+            cfg->xNextRelease = xTaskGetTickCount() + xPeriod;
+            cfg->xNextDeadline = xTaskGetTickCount() + xDeadline;
+            cfg->uxPriority = uxPriority;
+            cfg->uxStackDepth = uxStackDepth;
+
+            taskENTER_CRITICAL();
+            {
+                /* Add to the shadow list for tracking */
+                vListInsertEnd( &pxPeriodicTasksList, &( cfg->xPeriodicListItem ) );
+                xNextPeriodicEventTick = 0; /* Force re-evaluation on next tick */
+            }
+            taskEXIT_CRITICAL();
+        }
+        else 
+        {
+            vPortFree(cfg);
+        }
+        return xReturn;
     }
 
 
@@ -1827,9 +1873,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         traceRETURN_xTaskCreate( xReturn );
         
         /*Unwrap the config to store period and deadline inside the TCB*/
-        PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
-        pxNewTCB->xPeriod = cfg.period;
-        pxNewTCB->xDeadline = cfg.deadline;
+        // PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
+        // pxNewTCB->xPeriod = cfg.period;
+        // pxNewTCB->xDeadline = cfg.deadline;
         return xReturn;
     }
 
@@ -2159,6 +2205,23 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     else
     {
         mtCOVERAGE_TEST_MARKER();
+    }
+
+    if( ( TaskFunction_t ) pxTaskCode == ( TaskFunction_t ) vPeriodicWrapperTask )
+    {
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
+
+        /* Link the TCB to our configuration struct */
+        pxNewTCB->xPeriod = pxCfg->period;
+        pxNewTCB->xDeadline = pxCfg->deadline;
+        pxNewTCB->xIsPeriodic = pdTRUE;
+
+        /* THIS IS THE MISSING LINK: Store the TCB address in the handle */
+        pxCfg->pxTaskHandle = ( TaskHandle_t ) pxNewTCB;
+    }
+    else
+    {
+        pxNewTCB->xIsPeriodic = pdFALSE;
     }
 }
 /*-----------------------------------------------------------*/
@@ -4878,6 +4941,14 @@ BaseType_t xTaskIncrementTick( void )
          * delayed lists if it wraps to 0. */
         xTickCount = xConstTickCount;
 
+        /** Periodic task handling */
+        // TO-DO: add to config file
+        if( xConstTickCount >= xNextPeriodicEventTick)
+        {
+            // Iterate over periodic tasks
+            xSwitchRequired = prvProcessPeriodicTasks( xConstTickCount );
+        }
+
         if( xConstTickCount == ( TickType_t ) 0U )
         {
             taskSWITCH_DELAYED_LISTS();
@@ -5099,6 +5170,80 @@ BaseType_t xTaskIncrementTick( void )
 
     return xSwitchRequired;
 }
+/*-----------------------------------------------------------*/
+
+static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
+{
+    ListItem_t * pxIterator;
+    /* Cast to remove const qualifier warning */
+    ListItem_t * const pxListEnd = ( ListItem_t * ) listGET_END_MARKER( &pxPeriodicTasksList );
+    PeriodicWrap_t * pxConfig;
+    BaseType_t xYieldRequired = pdFALSE;
+    TCB_t * pxTCB;
+
+    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+         pxIterator != pxListEnd; 
+         pxIterator = listGET_NEXT( pxIterator ) )
+    {
+        pxConfig = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+        pxTCB = ( TCB_t * ) pxConfig->pxTaskHandle;
+
+        /* 2. Check for RELEASE TIME (R_k) */
+        if( xTickCount >= pxConfig->xNextRelease )
+        {
+            /* INTERNAL CHECK: Is the task in the suspended list? */
+            if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
+            {
+                /* SUCCESS: Resume directly without calling vTaskResume API */
+                ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+                prvAddTaskToReadyList( pxTCB );
+                
+                /* If the released task has higher priority, we must yield later */
+                if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
+                {
+                    xYieldRequired = pdTRUE;
+                }
+            }
+            else
+            {
+                /* OVERRUN: Task did not suspend itself in time */
+                mtCOVERAGE_TEST_MARKER();
+            }
+
+            /* Calculate the next release time for the next period */
+            pxConfig->xNextRelease += pxConfig->period;
+        }
+    }
+
+    /* 4. Optimization: Update the global next event time */
+    prvUpdateNextPeriodicEventTick();
+
+    return xYieldRequired;
+}
+
+/*-----------------------------------------------------------*/
+
+static void prvUpdateNextPeriodicEventTick( void )
+{
+    ListItem_t * pxIterator;
+    ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
+    TickType_t xMinTick = portMAX_DELAY;
+
+    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+         pxIterator != pxListEnd; 
+         pxIterator = listGET_NEXT( pxIterator ) )
+    {
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+
+        /* Find the soonest release time in the entire shadow list */
+        if( pxCfg->xNextRelease < xMinTick )
+        {
+            xMinTick = pxCfg->xNextRelease;
+        }
+    }
+    xNextPeriodicEventTick = xMinTick;
+}
+
 /*-----------------------------------------------------------*/
 
 #if ( configUSE_APPLICATION_TASK_TAG == 1 )
@@ -6205,6 +6350,9 @@ static void prvInitialiseTaskLists( void )
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );
     vListInitialise( &xPendingReadyList );
+
+    vListInitialise( &pxPeriodicTasksList );
+    xNextPeriodicEventTick = portMAX_DELAY;
 
     #if ( INCLUDE_vTaskDelete == 1 )
     {
