@@ -3794,4 +3794,54 @@ void vTaskInternalSetTimeOutState( TimeOut_t * const pxTimeOut ) PRIVILEGED_FUNC
     }
 #endif
 /* *INDENT-ON* */
+
+/*--------------------------------------------*/
+/*PEOS Policy define */
+typedef enum{
+    POLICY_SKIP,    //skip the new job if the old one hasn't finished
+    POLICY_KILL,    //end the old job and start the new one
+    POLICY_CATCH_UP //Queue new job
+} OverrunPolicy_t;
+
+//PEOS Sigle Periodic Task Config
+typedef struct {
+    TaskFunction_t pxTaskCode;      // Pointer to the function
+    const char *pcName;             // Name of task
+    configSTACK_DEPTH_TYPE usStackDepth; // stack dim
+    void *pvParameters;             // Args
+    TickType_t xPeriod;             
+    TickType_t xDeadline;
+    UBaseType_t uxPriority;         // FreeRTOS Priority
+    
+    OverrunPolicy_t xTaskPolicy;    //task policy
+} PeriodicTaskConfig_t;
+
+//PEOS global configuration structure 
+typedef struct
+{
+    OverrunPolicy_t globalPolicy;
+    uint32_t max_tasks;
+    BaseType_t trace_enabled;
+    /*Task List*/
+    UBaseType_t uxNumTasks;
+    PeriodicTaskConfig_t *pxTasks;
+    
+}SchedulerConfig_t;
+
+BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
+                                const char * const pcName,
+                                const configSTACK_DEPTH_TYPE uxStackDepth,
+                                void * const pvParameters,
+                                TickType_t xPeriod,
+                                TickType_t xDeadline,
+                                UBaseType_t uxPriority,
+                                TaskHandle_t * const pxCreatedTask);
+
+                                
+TickType_t xTaskGetDeadline( TaskHandle_t xTask );
+
+void vConfigureScheduler(SchedulerConfig_t *pxCfg);     //PEOS configuration function prototype
+
+/*----------------------------------------------*/
+
 #endif /* INC_TASK_H */
