@@ -3835,7 +3835,8 @@ BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
                                 TickType_t xPeriod,
                                 TickType_t xDeadline,
                                 UBaseType_t uxPriority,
-                                TaskHandle_t * const pxCreatedTask);
+                                TaskHandle_t * const pxCreatedTask,
+                                OverrunPolicy_t xTaskPolicy);
 
                                 
 TickType_t xTaskGetDeadline( TaskHandle_t xTask );

@@ -1,4 +1,4 @@
-#include "FreeRTOS.h"
+/*#include "FreeRTOS.h"
 #include "task.h"
 
 #include "uart.h"
@@ -60,7 +60,7 @@ int main(int argc, char **argv){
 	};
 
 	SchedulerConfig_t myConfig = {
-		.globalPolicy = POLICY_KILL,
+		.globalPolicy = POLICY_SKIP,
 		.trace_enabled = pdTRUE,
 		.uxNumTasks=2,
 		.pxTasks = myTasks
@@ -72,4 +72,142 @@ int main(int argc, char **argv){
 
 	vTaskStartScheduler();
 	for( ; ; );
+}*/
+/* Standard includes. */
+#include <stdio.h>
+#include <stddef.h>
+#include <string.h>
+
+/* Kernel includes. */
+#include "FreeRTOS.h"
+#include "task.h"
+#include "uart.h"
+/* ===========================================================
+ * FUNZIONI DI TEST
+ * =========================================================== */
+
+/* Funzione per "bruciare" tempo (Busy Wait) */
+void vBusyWait( int ticks_simulated )
+{
+    volatile int i;
+    /* Moltiplicatore per QEMU. 
+     * Se non vedi Overrun, aumenta questo numero (es. * 20000) */
+    for( i = 0; i < ( ticks_simulated * 15000 ); i++ ) 
+    {
+        __asm volatile( "nop" );
+    }
+}
+
+/* Task di Test per Policy KILL */
+void vTestTask( void *pvParameters )
+{
+    const char *pcName = (const char *) pvParameters;
+    
+	char s[80];
+
+    /* 1. START MSG */
+    sprintf(s,"[%u] %s: START Job\n", xTaskGetTickCount(), pcName);
+    UART_printf(s);
+
+    /* 2. Lavoro Lento (deve durare PIÙ del periodo) */
+    /* Periodo impostato a 100, qui aspettiamo circa 250 */
+	vBusyWait(250);
+    
+    /* 3. END MSG */
+    /* - SKIP e CATCH_UP arriveranno qui (in ritardo).
+     * - KILL non dovrebbe MAI arrivare qui (verrà ucciso durante il vBusyWait).*/
+    sprintf(s,"[%u] %s: END \n", xTaskGetTickCount(), pcName);
+	UART_printf(s);
+}
+
+void vTestTask2( void *pvParameters )
+{
+    const char *pcName = (const char *) pvParameters;
+    
+	char s[80];
+
+    /* 1. START MSG */
+    sprintf(s,"[%u] %s: start Job\n", xTaskGetTickCount(), pcName);
+    UART_printf(s);
+
+    /* 2. Lavoro Lento (deve durare PIÙ del periodo) */
+    /* Periodo impostato a 100, qui aspettiamo circa 250 */
+    //vBusyWait( 250 ); 
+	vBusyWait(250);
+    
+    /* 3. END MSG */
+    /* - SKIP e CATCH_UP arriveranno qui (in ritardo).
+     * - KILL non dovrebbe MAI arrivare qui (verrà ucciso durante il vBusyWait).*/
+    sprintf(s,"[%u] %s: end \n", xTaskGetTickCount(), pcName);
+	UART_printf(s);
+}
+
+
+/* ===========================================================
+ * MAIN
+ * =========================================================== */
+int main( void )
+{
+
+	UART_init();
+	
+    /* 1. Task config */
+    PeriodicTaskConfig_t myTasks[] = {
+        /* TASK 1: POLICY SKIP (Default 0) */
+        { 
+            .pcName = "TASK_KILL",
+            .pxTaskCode = vTestTask,
+            .pvParameters = "TASK_KILL",
+            .usStackDepth = configMINIMAL_STACK_SIZE * 2,
+            .uxPriority = 1,
+            .xPeriod = 100,      
+            .xDeadline = 100,
+            .xTaskPolicy = POLICY_KILL
+        },
+
+        /* TASK 2: POLICY KILL (1) */
+        { 
+            .pcName = "TASK_SKIP",
+            .pxTaskCode = vTestTask2,
+            .pvParameters = "TASK_SKIP",
+            .usStackDepth = configMINIMAL_STACK_SIZE * 2,
+            /* Priorità leggermente più alta per vederlo emergere nel log */
+            //.uxPriority = 2, 
+			.uxPriority=1,    
+            .xPeriod = 100,      
+            .xDeadline = 500,
+			.xTaskPolicy = POLICY_SKIP
+            
+        },
+
+        //TASK 3: POLICY CATCH_UP (2) 
+        { 
+            .pcName = "TASK_CATCH",
+            .pxTaskCode = vTestTask,
+            .pvParameters = "T_CATCH",
+            .usStackDepth = configMINIMAL_STACK_SIZE * 2,
+            .uxPriority = 1,
+            .xPeriod = 100,      
+            .xDeadline = 100,
+            .xTaskPolicy = POLICY_CATCH_UP 
+        }
+    };
+
+    /* 2. Configurazione Scheduler */
+    SchedulerConfig_t myConfig = {
+        .globalPolicy = POLICY_SKIP, 
+        .trace_enabled = pdTRUE,
+        .uxNumTasks = 3,
+        .pxTasks = myTasks
+    };
+	
+	UART_printf("\nSTART SCHEDULING\n\n");
+    
+	vConfigureScheduler( &myConfig );
+    
+    vTaskStartScheduler();
+
+    /* Loop infinito di sicurezza */
+    for( ;; );
+    return 0;
 }
