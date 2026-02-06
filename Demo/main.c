@@ -4,6 +4,11 @@
 #include "uart.h"
 #include "logger.h"
 
+
+#ifdef TEST_SUITE
+#include "test_suite.h"
+#endif
+
 extern BaseType_t xTaskCreatePeriodic( TaskFunction_t pxTaskCode,
                                     const char * const pcName,
                                     const configSTACK_DEPTH_TYPE uxStackDepth,
@@ -52,12 +57,27 @@ int main(int argc, char **argv){
 	(void) argc;
 	(void) argv;
 
-	TaskHandle_t xHandle1;
-
 	UART_init();
 	//logger initialization
 	vLoggerInit();
 
+#ifdef TEST_SUITE
+	UART_printf("\r\n--TEST SUITE--\r\n");
+	SchedulerConfig cfg = {
+		.globalPolicy = POLICY_SKIP,
+		.trace_enabled = pdTRUE,
+		.maxtasks = 8,
+		.pxTasks = NULL
+	};
+	vConfigureScheduler(&cfg);
+	xTaskCreate(vTestSuite, "TestSuite",2048,NULL,tskIDLE_PRIORITY+2,NULL);
+	vTaskStartScheduler();
+#else
+	
+
+	TaskHandle_t xHandle1;
+
+	
 	xTaskCreatePeriodic(HelloTask, "MyTask", 2048, NULL, pdMS_TO_TICKS(100), pdMS_TO_TICKS(250), 2, &xHandle1);
 	//xTaskSetPeriod(xHandle1, 1000);
 	//xTaskCreatePeriodic(HelloTask2, "MyTask2", 2048, NULL, pdMS_TO_TICKS(450), 2, NULL);
@@ -67,6 +87,9 @@ int main(int argc, char **argv){
 	//xTaskCreate(HelloTask2, "Hello2", configMINIMAL_STACK_SIZE + 64, NULL, tskIDLE_PRIORITY + 1, &xHandle);
 	//xTaskSetPeriod( xHandle, 100 );   
 	vTaskStartScheduler();
+
+#endif
+
 	for( ; ; );
 }
 
