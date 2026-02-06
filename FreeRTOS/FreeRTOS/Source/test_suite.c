@@ -80,35 +80,35 @@ void vTask_Generic(void *pvParameters){
 
 static bool vStressTest_OverlappingHRT(void)
 {
-   gTestRunning = true;
+    gTestRunning = true;
 
-   xTaskCreatePeriodic(vTask_Generic,"T10",512,(void*)8,
-       pdMS_TO_TICKS(10),pdMS_TO_TICKS(10),3,&xTestTasks[0],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T20",512,(void*)12,
-       pdMS_TO_TICKS(20),pdMS_TO_TICKS(20),3,&xTestTasks[1],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T30",512,(void*)16,
-       pdMS_TO_TICKS(30),pdMS_TO_TICKS(30),3,&xTestTasks[2],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T40",512,(void*)20,
-       pdMS_TO_TICKS(40),pdMS_TO_TICKS(40),3,&xTestTasks[3],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T50",512,(void*)24,
-       pdMS_TO_TICKS(50),pdMS_TO_TICKS(50),3,&xTestTasks[4],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T60",512,(void*)28,
-       pdMS_TO_TICKS(60),pdMS_TO_TICKS(60),3,&xTestTasks[5],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T70",512,(void*)32,
-       pdMS_TO_TICKS(70),pdMS_TO_TICKS(70),3,&xTestTasks[6],POLICY_SKIP);
-   xTaskCreatePeriodic(vTask_Generic,"T80",512,(void*)36, 
-       pdMS_TO_TICKS(80),pdMS_TO_TICKS(80),3,&xTestTasks[7],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T10",512,(void*)8,
+        pdMS_TO_TICKS(10),pdMS_TO_TICKS(10),3,&xTestTasks[0],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T20",512,(void*)12,
+        pdMS_TO_TICKS(20),pdMS_TO_TICKS(20),3,&xTestTasks[1],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T30",512,(void*)16,
+        pdMS_TO_TICKS(30),pdMS_TO_TICKS(30),3,&xTestTasks[2],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T40",512,(void*)20,
+        pdMS_TO_TICKS(40),pdMS_TO_TICKS(40),3,&xTestTasks[3],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T50",512,(void*)24,
+        pdMS_TO_TICKS(50),pdMS_TO_TICKS(50),3,&xTestTasks[4],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T60",512,(void*)28,
+        pdMS_TO_TICKS(60),pdMS_TO_TICKS(60),3,&xTestTasks[5],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T70",512,(void*)32,
+        pdMS_TO_TICKS(70),pdMS_TO_TICKS(70),3,&xTestTasks[6],POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic,"T80",512,(void*)36, 
+        pdMS_TO_TICKS(80),pdMS_TO_TICKS(80),3,&xTestTasks[7],POLICY_SKIP);
 
 
 
-        vTaskDelay(pdMS_TO_TICKS(400));
+    vTaskDelay(pdMS_TO_TICKS(400));
 
-        gTestRunning = false;
+    gTestRunning = false;
 
-        vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(20));
 
-        return !LoggerDeadlineMiss(LOGGER_TASK_DEADLINE_MISS);
-    
+    return !LoggerDeadlineMiss(LOGGER_TASK_DEADLINE_MISS);
+
 
 }
 
@@ -193,7 +193,7 @@ static bool vTest_OverrunPolicySkip(void){
     gTestRunning = true;
 
 
-    xTaskCreatePeriodic(vTask_Generic,"SKIP",512,(void*)15,
+    xTaskCreatePeriodic(vTask_Generic,"Skip",512,(void*)15,
         pdMS_TO_TICKS(10),pdMS_TO_TICKS(10),2,&xTestTasks[0],POLICY_SKIP);
 
 
