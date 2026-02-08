@@ -18,6 +18,9 @@ This document provides an overview of the functions used to manage periodic task
 11. [vLoggerStore](#vloggerstore)
 12. [vLoggerPrint](#vloggerprint)
 13. [vLoggerTask](#vloggertask)
+14. [xTaskCreateAperiodic](#xtaskcreateaperiodic)
+15. [vPollingServerFunction](#vpollingserverfunction)
+16. [xCreatePollingServer](#xcreatepollingserver)
 
 ---
 
@@ -106,4 +109,28 @@ void vLoggerPrint(void);
 > *Description*: implement the logger task
 ```c
 void vLoggerTask(void *pvParameters);
+```
+
+#### xTaskCreateAperiodic
+> *Description*: API function to create an aperiodic task, managed by the polling server
+```c
+BaseType_t xTaskCreateAperiodic(TaskFunction_t pxTaskCode, 
+                                 void *pvParameters, 
+                                 TickType_t xSoftDeadline,
+                                 BaseType_t xPolicy);
+```
+
+#### vPollingServerFunction
+> *Description*: implement the polling server functionality
+```c
+static void vPollingServerFunction(void *pvParameters);
+```
+
+#### xCreatePollingServer
+> *Description*: instantiate the polling server as a task
+```c
+BaseType_t xCreatePollingServer(TickType_t xPeriod, 
+                                 TickType_t xDeadline, 
+                                 UBaseType_t uxPriority);
+
 ```
