@@ -3803,6 +3803,11 @@ typedef enum{
     POLICY_CATCH_UP //Queue new job
 } OverrunPolicy_t;
 
+typedef enum {
+    APERIODIC_POLICY_OVERRUN = 0,
+    APERIODIC_POLICY_KILL    = 1
+} AperiodicPolicy_t;
+
 //PEOS Sigle Periodic Task Config
 typedef struct {
     TaskFunction_t pxTaskCode;      // Pointer to the function
@@ -3843,6 +3848,15 @@ TickType_t xTaskGetDeadline( TaskHandle_t xTask );
 
 void vConfigureScheduler(SchedulerConfig_t *pxCfg);     //PEOS configuration function prototype
 
+BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode, 
+                                 void *pvParameters, 
+                                 TickType_t xSoftDeadline,
+                                 BaseType_t xPolicy );
+
+
+BaseType_t xCreatePollingServer( TickType_t xPeriod, 
+                                 TickType_t xDeadline, 
+                                 UBaseType_t uxPriority );
 /*----------------------------------------------*/
 
 #endif /* INC_TASK_H */

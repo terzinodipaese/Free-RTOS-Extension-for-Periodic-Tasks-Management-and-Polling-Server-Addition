@@ -63,6 +63,7 @@
  * for convenience only, and are NOT considered part of the kernel. */
     #include <stdio.h>
 #endif /* configUSE_STATS_FORMATTING_FUNCTIONS == 1 ) */
+#include <queue.h>
 
 #if ( configUSE_PREEMPTION == 0 )
 
@@ -5251,8 +5252,134 @@ BaseType_t xTaskIncrementTick( void )
                 ( pxTCB )->pcTaskName, \
                  policy );\
                 UART_printf(s);
-        
+    
 #endif
+#ifndef tracePOLLING_SERVER
+    #define tracePOLLING_SERVER() \
+        UART_printf("Polling server\n");
+    
+#endif
+#ifndef tracePOLLING_OVERRUN
+    #define tracePOLLING_OVERRUN()
+#endif
+
+
+typedef struct {
+    TaskFunction_t fn;
+    void *param;
+    TickType_t xSoftDeadline; /* Relative to activation */
+    AperiodicPolicy_t xPolicy;
+    uint32_t ulTaskID;        /* ID for logging */
+} AperiodicJob_t;
+
+static QueueHandle_t xAperiodicQueue = NULL;
+
+/* Globals to let the Kernel monitor the Server's internal state */
+static TaskHandle_t xPollingServerHandle = NULL; /* To identify the server */
+static volatile BaseType_t xAperiodicJobRunning = pdFALSE;
+static volatile TickType_t xAperiodicJobAbsDeadline = 0;
+static volatile AperiodicPolicy_t xAperiodicJobPolicy = APERIODIC_POLICY_OVERRUN;
+static volatile uint32_t ulCurrentAperiodicID = 0;
+
+BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode, 
+                                 void *pvParameters, 
+                                 TickType_t xSoftDeadline,
+                                 BaseType_t xPolicy )
+{
+    /* Auto-initialize queue on first use */
+    if( xAperiodicQueue == NULL )
+    {
+        xAperiodicQueue = xQueueCreate( 10, sizeof(AperiodicJob_t) );
+        if( xAperiodicQueue == NULL ) return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+    }
+
+    static uint32_t ulNextID = 1;
+
+    AperiodicJob_t xJob;
+    xJob.fn = pxTaskCode;
+    xJob.param = pvParameters;
+    xJob.xSoftDeadline = xSoftDeadline;
+    xJob.xPolicy = (AperiodicPolicy_t) xPolicy;
+    xJob.ulTaskID = ulNextID++;
+
+    /* Send to queue (Non-blocking: if full, we drop it or return error) */
+    return xQueueSend( xAperiodicQueue, &xJob, 0 );
+}
+
+static void vPollingServerFunction( void *pvParameters )
+{
+    (void) pvParameters;
+    AperiodicJob_t xJob;
+
+    /* Initialize queue if not exists */
+    if( xAperiodicQueue == NULL )
+    {
+         xAperiodicQueue = xQueueCreate( 10, sizeof(AperiodicJob_t) );
+    }
+
+    for( ;; )
+    {
+        tracePOLLING_SERVER();
+        /* 1. Process all pending jobs in the queue (until empty) */
+        /* Note: Real polling servers might limit this by budget, 
+           but here we process until empty or until period ends naturally. */
+        while( xQueueReceive( xAperiodicQueue, &xJob, 0 ) == pdPASS )
+        {
+            /* 2. Setup Monitor Globals so Kernel can see us */
+            TickType_t xNow = xTaskGetTickCount();
+            
+            taskENTER_CRITICAL();
+            xAperiodicJobAbsDeadline = xNow + xJob.xSoftDeadline;
+            xAperiodicJobPolicy = xJob.xPolicy;
+            ulCurrentAperiodicID = xJob.ulTaskID;
+            xAperiodicJobRunning = pdTRUE;
+            taskEXIT_CRITICAL();
+
+            /* 3. Execute the Job */
+            /* If Policy is KILL, the kernel might reset us during this call! */
+            xJob.fn( xJob.param );
+
+            /* 4. Job Finished - Check for OVERRUN logs */
+            taskENTER_CRITICAL();
+            xAperiodicJobRunning = pdFALSE; /* Stop monitoring */
+            taskEXIT_CRITICAL();
+
+            xNow = xTaskGetTickCount();
+            if( xNow > xAperiodicJobAbsDeadline )
+            {
+                tracePOLLING_OVERRUN();
+            }
+        }
+
+        /* 5. Queue Empty: Suspend self and wait for next Period */
+        vTaskSuspend( NULL );
+    }
+}
+
+BaseType_t xCreatePollingServer( TickType_t xPeriod, 
+                                 TickType_t xDeadline, 
+                                 UBaseType_t uxPriority )
+{
+    /* Create it as a Periodic Task with SKIP policy (Server shouldn't catch up) */
+    /* We pass the internal vPollingServerFunction as the code */
+    
+    BaseType_t xReturn = xTaskCreatePeriodic( 
+                            vPollingServerFunction, 
+                            "PollServer", 
+                            4096,   /* Large stack for safety */
+                            NULL, 
+                            xPeriod, 
+                            xDeadline, 
+                            uxPriority, 
+                            &xPollingServerHandle, /* Capture handle for kernel monitor */
+                            POLICY_SKIP
+                         );
+
+    return xReturn;
+}
+
+
+
 /*------------------------------------*/
 
 //PEOS HARD KILL */

@@ -1,0 +1,1 @@
+arm-none-eabi-gcc -I../FreeRTOS/FreeRTOS/Source/include -I../FreeRTOS/FreeRTOS/Source/portable/GCC/ARM_CM3 -I. -ffreestanding -mcpu=cortex-m3 -mthumb -Wall -Wextra -Wshadow -g3 -Os -ffunction-sections -fdata-sections -c ../FreeRTOS/FreeRTOS/Source/tasks.c -o Output/tasks.o

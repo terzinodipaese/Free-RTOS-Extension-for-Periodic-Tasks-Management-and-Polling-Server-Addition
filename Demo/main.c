@@ -127,7 +127,7 @@ void vTestTask2( void *pvParameters )
 	char s[80];
 
     /* 1. START MSG */
-    sprintf(s,"[%u] %s: start Job\n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%u] %s: START Job\n", xTaskGetTickCount(), pcName);
     UART_printf(s);
 
     /* 2. Lavoro Lento (deve durare PIÙ del periodo) */
@@ -138,8 +138,15 @@ void vTestTask2( void *pvParameters )
     /* 3. END MSG */
     /* - SKIP e CATCH_UP arriveranno qui (in ritardo).
      * - KILL non dovrebbe MAI arrivare qui (verrà ucciso durante il vBusyWait).*/
-    sprintf(s,"[%u] %s: end \n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%u] %s: END \n", xTaskGetTickCount(), pcName);
 	UART_printf(s);
+}
+
+void aperiodic( void *pvParameters ) {
+    UART_printf("Aperiodic 1 executed\n");
+}
+void aperiodic2( void *pvParameters ) {
+    UART_printf("Aperiodic 2 executed\n");
 }
 
 
@@ -159,7 +166,7 @@ int main( void )
             .pxTaskCode = vTestTask,
             .pvParameters = "TASK_KILL",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority = 1,
+            .uxPriority = 2,
             .xPeriod = 100,      
             .xDeadline = 100,
             .xTaskPolicy = POLICY_KILL
@@ -173,7 +180,7 @@ int main( void )
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
             /* Priorità leggermente più alta per vederlo emergere nel log */
             //.uxPriority = 2, 
-			.uxPriority=1,    
+			.uxPriority = 1,    
             .xPeriod = 100,      
             .xDeadline = 500,
 			.xTaskPolicy = POLICY_SKIP
@@ -184,9 +191,9 @@ int main( void )
         { 
             .pcName = "TASK_CATCH",
             .pxTaskCode = vTestTask,
-            .pvParameters = "T_CATCH",
+            .pvParameters = "TASK_CATCH",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority = 1,
+            .uxPriority = 2,
             .xPeriod = 100,      
             .xDeadline = 100,
             .xTaskPolicy = POLICY_CATCH_UP 
@@ -200,11 +207,18 @@ int main( void )
         .uxNumTasks = 3,
         .pxTasks = myTasks
     };
+
+
 	
 	UART_printf("\nSTART SCHEDULING\n\n");
     
-	vConfigureScheduler( &myConfig );
+	
+    xCreatePollingServer(200, 200, 1);
+
+    xTaskCreateAperiodic(aperiodic, NULL, 100, APERIODIC_POLICY_OVERRUN);
     
+    vConfigureScheduler( &myConfig );
+
     vTaskStartScheduler();
 
     /* Loop infinito di sicurezza */
