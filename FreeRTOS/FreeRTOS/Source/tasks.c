@@ -5287,6 +5287,8 @@ typedef struct {
     TickType_t xSoftDeadline; /* Relative to activation */
     AperiodicPolicy_t xPolicy;
     uint32_t ulTaskID;        /* ID for logging */
+    
+    TickType_t xAbsDeadline;
 } AperiodicJob_t;
 
 static QueueHandle_t xAperiodicQueue = NULL;
@@ -5298,10 +5300,32 @@ static volatile TickType_t xAperiodicJobAbsDeadline = 0;
 static volatile AperiodicPolicy_t xAperiodicJobPolicy = APERIODIC_POLICY_OVERRUN;
 static volatile uint32_t ulCurrentAperiodicID = 0;
 
-BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
+/*
+static void vAperiodicWrapperTask(void *pvParameters)
+{
+	if (pvParameters == NULL) {
+        taskENTER_CRITICAL();
+		vTaskDelete(NULL);
+		taskEXIT_CRITICAL();
+        return;
+    }
+    
+	AperiodicJob_t * cfg = (AperiodicJob_t * ) pvParameters;
+	
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	
+	if (cfg->fn != NULL)
+		cfg->fn(cfg->param);
+	
+	taskENTER_CRITICAL();
+	vTaskDelete(NULL);
+	taskEXIT_CRITICAL();
+}*/
+
+BaseType_t xTaskCreateAperiodic(TaskFunction_t pxTaskCode,
                                  void *pvParameters, 
                                  TickType_t xSoftDeadline,
-                                 BaseType_t xPolicy )
+                                 BaseType_t xPolicy)
 {
     /* Auto-initialize queue on first use */
     if( xAperiodicQueue == NULL )
@@ -5318,10 +5342,11 @@ BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
     xJob.xSoftDeadline = xSoftDeadline;
     xJob.xPolicy = (AperiodicPolicy_t) xPolicy;
     xJob.ulTaskID = ulNextID++;
-	
+    
+    xJob.xAbsDeadline = xTaskGetTickCount() + xSoftDeadline;
 	
 	/* Send to queue (Non-blocking: if full, we drop it or return error) */
-	return xQueueSend( xAperiodicQueue, &xJob, 0 );
+	return xQueueSend(xAperiodicQueue, &xJob, 0);
 }
 
 static void vPollingServerFunction( void *pvParameters )
@@ -5346,35 +5371,29 @@ static void vPollingServerFunction( void *pvParameters )
             /* 2. Setup Monitor Globals so Kernel can see us */
             TickType_t xNow = xTaskGetTickCount();
             
-            taskENTER_CRITICAL();
-            xAperiodicJobAbsDeadline = xNow + xJob.xSoftDeadline;
-            xAperiodicJobPolicy = xJob.xPolicy;
-            ulCurrentAperiodicID = xJob.ulTaskID;
-            xAperiodicJobRunning = pdTRUE;
-            taskEXIT_CRITICAL();
-            
-            xJob.fn(xJob.param);
-            
-            taskENTER_CRITICAL();
-            xAperiodicJobRunning = pdFALSE; /* Stop monitoring */
-            taskEXIT_CRITICAL();
-
-            xNow = xTaskGetTickCount();
-            
-            // missed deadline, so need to apply policy for the task
-            if(xNow > xAperiodicJobAbsDeadline)
-            {	
-				switch(xAperiodicJobPolicy)
+            //missed deadline
+            if(xNow >= xJob.xAbsDeadline)
+            {
+				switch(xJob.xPolicy)
 				{
 					case APERIODIC_POLICY_KILL:
 						tracePOLLING_DEADLINEMISS1(xJob);
 						break;
+						
 					case APERIODIC_POLICY_OVERRUN:
 						tracePOLLING_DEADLINEMISS2(xJob);
+						xJob.fn(xJob.param);
 						break;
+						
 					default:
-						break;
+						break; 
 				}
+			}
+			
+			
+			else
+			{
+				xJob.fn(xJob.param);
 			}
         }
 
