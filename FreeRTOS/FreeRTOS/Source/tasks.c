@@ -5353,53 +5353,29 @@ static void vPollingServerFunction( void *pvParameters )
             xAperiodicJobRunning = pdTRUE;
             taskEXIT_CRITICAL();
             
+            xJob.fn(xJob.param);
+            
+            taskENTER_CRITICAL();
+            xAperiodicJobRunning = pdFALSE; /* Stop monitoring */
+            taskEXIT_CRITICAL();
+
+            xNow = xTaskGetTickCount();
+            
             // missed deadline, so need to apply policy for the task
             if(xNow > xAperiodicJobAbsDeadline)
             {	
 				switch(xAperiodicJobPolicy)
 				{
 					case APERIODIC_POLICY_KILL:
-						/*
-							we print some info about deadline miss, but we don't execute the
-							task since it has to be killed
-						 */
 						tracePOLLING_DEADLINEMISS1(xJob);
 						break;
 					case APERIODIC_POLICY_OVERRUN:
-						// we print some info about deadline miss
 						tracePOLLING_DEADLINEMISS2(xJob);
-						xJob.fn(xJob.param);
 						break;
 					default:
 						break;
 				}
 			}
-			
-			// deadline not missed, so we execute normally without logging
-			else
-			{
-				UART_printf("[POLLING SERVER] no deadline miss for aperiodic task\n");
-				xJob.fn(xJob.param);
-			}
-            
-            
-            taskENTER_CRITICAL();
-            xAperiodicJobRunning = pdFALSE;
-            taskEXIT_CRITICAL();
-            
-            /*
-            xJob.fn( xJob.param );
-			
-			taskENTER_CRITICAL();
-            xAperiodicJobRunning = pdFALSE;
-            taskEXIT_CRITICAL();
-
-            xNow = xTaskGetTickCount();
-            if( xNow > xAperiodicJobAbsDeadline )
-            {
-                tracePOLLING_OVERRUN();
-            }
-            */
         }
 
         /* 5. Queue Empty: Suspend self and wait for next Period */

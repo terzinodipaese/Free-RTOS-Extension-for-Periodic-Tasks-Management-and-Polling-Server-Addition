@@ -171,6 +171,13 @@ void aperiodic5( void *pvParameters ) {
     UART_printf("Aperiodic 5 executed\n");
 }
 
+void aperiodic6( void *pvParameters ) {
+	(void) pvParameters;
+	const TickType_t xDelay = 200 / portTICK_PERIOD_MS;
+	vTaskDelay(xDelay);
+    UART_printf("Aperiodic 6 executed\n");
+}
+
 
 /* ===========================================================
  * MAIN
@@ -242,6 +249,7 @@ int main( void )
     xTaskCreateAperiodic(aperiodic3, NULL, 1, APERIODIC_POLICY_OVERRUN);
     xTaskCreateAperiodic(aperiodic4, NULL, 1, APERIODIC_POLICY_KILL);
     xTaskCreateAperiodic(aperiodic5, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    xTaskCreateAperiodic(aperiodic6, NULL, 1, APERIODIC_POLICY_KILL);
     
     vConfigureScheduler( &myConfig );
 
