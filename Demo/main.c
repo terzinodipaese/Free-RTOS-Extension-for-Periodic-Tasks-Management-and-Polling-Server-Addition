@@ -106,7 +106,7 @@ void vTestTask( void *pvParameters )
 	char s[80];
 
     /* 1. START MSG */
-    sprintf(s,"[%u] %s: START Job\n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%lu] %s: START Job\n", xTaskGetTickCount(), pcName);
     UART_printf(s);
 
     /* 2. Lavoro Lento (deve durare PIÙ del periodo) */
@@ -116,7 +116,7 @@ void vTestTask( void *pvParameters )
     /* 3. END MSG */
     /* - SKIP e CATCH_UP arriveranno qui (in ritardo).
      * - KILL non dovrebbe MAI arrivare qui (verrà ucciso durante il vBusyWait).*/
-    sprintf(s,"[%u] %s: END \n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%lu] %s: END \n", xTaskGetTickCount(), pcName);
 	UART_printf(s);
 }
 
@@ -127,7 +127,7 @@ void vTestTask2( void *pvParameters )
 	char s[80];
 
     /* 1. START MSG */
-    sprintf(s,"[%u] %s: START Job\n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%lu] %s: START Job\n", xTaskGetTickCount(), pcName);
     UART_printf(s);
 
     /* 2. Lavoro Lento (deve durare PIÙ del periodo) */
@@ -138,15 +138,37 @@ void vTestTask2( void *pvParameters )
     /* 3. END MSG */
     /* - SKIP e CATCH_UP arriveranno qui (in ritardo).
      * - KILL non dovrebbe MAI arrivare qui (verrà ucciso durante il vBusyWait).*/
-    sprintf(s,"[%u] %s: END \n", xTaskGetTickCount(), pcName);
+    sprintf(s,"[%lu] %s: END \n", xTaskGetTickCount(), pcName);
 	UART_printf(s);
 }
 
 void aperiodic( void *pvParameters ) {
+	(void) pvParameters;
+	const TickType_t xDelay = 30 / portTICK_PERIOD_MS;
+	vTaskDelay(xDelay);
     UART_printf("Aperiodic 1 executed\n");
 }
+
 void aperiodic2( void *pvParameters ) {
+	(void) pvParameters;
     UART_printf("Aperiodic 2 executed\n");
+}
+
+void aperiodic3( void *pvParameters ) {
+	(void) pvParameters;
+    UART_printf("Aperiodic 3 executed\n");
+}
+
+void aperiodic4( void *pvParameters ) {
+	(void) pvParameters;
+    UART_printf("Aperiodic 4 executed\n");
+}
+
+void aperiodic5( void *pvParameters ) {
+	(void) pvParameters;
+	const TickType_t xDelay = 70 / portTICK_PERIOD_MS;
+	vTaskDelay(xDelay);
+    UART_printf("Aperiodic 5 executed\n");
 }
 
 
@@ -213,9 +235,13 @@ int main( void )
 	UART_printf("\nSTART SCHEDULING\n\n");
     
 	
-    xCreatePollingServer(200, 200, 1);
+    xCreatePollingServer(20, 20, 1);
 
-    xTaskCreateAperiodic(aperiodic, NULL, 100, APERIODIC_POLICY_OVERRUN);
+    xTaskCreateAperiodic(aperiodic, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    xTaskCreateAperiodic(aperiodic2, NULL, 1, APERIODIC_POLICY_KILL);
+    xTaskCreateAperiodic(aperiodic3, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    xTaskCreateAperiodic(aperiodic4, NULL, 1, APERIODIC_POLICY_KILL);
+    xTaskCreateAperiodic(aperiodic5, NULL, 1, APERIODIC_POLICY_OVERRUN);
     
     vConfigureScheduler( &myConfig );
 

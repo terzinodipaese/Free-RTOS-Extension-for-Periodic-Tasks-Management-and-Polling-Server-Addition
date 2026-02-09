@@ -5247,7 +5247,7 @@ BaseType_t xTaskIncrementTick( void )
 #ifndef traceTASK_OVERRUN
     #define traceTASK_OVERRUN( pxTCB, policy ) \
     char s[100];\
-        sprintf(s,"[ %u ] %s OVERRUN -> Policy: %d\n", \
+        sprintf(s,"[ %lu ] %s OVERRUN -> Policy: %d\n", \
                 xTaskGetTickCount(), \
                 ( pxTCB )->pcTaskName, \
                  policy );\
@@ -5259,8 +5259,25 @@ BaseType_t xTaskIncrementTick( void )
         UART_printf("Polling server\n");
     
 #endif
-#ifndef tracePOLLING_OVERRUN
-    #define tracePOLLING_OVERRUN()
+
+#ifndef tracePOLLING_DEADLINEMISS1
+    #define tracePOLLING_DEADLINEMISS1(xJob) \
+		char a1[100]; \
+		sprintf(a1, "[POLLING SERVER] [ %lu ] taskId=%lu DEADLINE MISS -> Policy: %d\n", \
+					xTaskGetTickCount(), \
+					xJob.ulTaskID, \
+					xJob.xPolicy); \
+		UART_printf(a1);
+#endif
+
+#ifndef tracePOLLING_DEADLINEMISS2
+    #define tracePOLLING_DEADLINEMISS2(xJob) \
+		char a2[100]; \
+		sprintf(a2, "[POLLING SERVER] [ %lu ] taskId=%lu DEADLINE MISS -> Policy: %d\n", \
+					xTaskGetTickCount(), \
+					xJob.ulTaskID, \
+					xJob.xPolicy); \
+		UART_printf(a2);
 #endif
 
 
@@ -5281,7 +5298,7 @@ static volatile TickType_t xAperiodicJobAbsDeadline = 0;
 static volatile AperiodicPolicy_t xAperiodicJobPolicy = APERIODIC_POLICY_OVERRUN;
 static volatile uint32_t ulCurrentAperiodicID = 0;
 
-BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode, 
+BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
                                  void *pvParameters, 
                                  TickType_t xSoftDeadline,
                                  BaseType_t xPolicy )
@@ -5301,9 +5318,10 @@ BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
     xJob.xSoftDeadline = xSoftDeadline;
     xJob.xPolicy = (AperiodicPolicy_t) xPolicy;
     xJob.ulTaskID = ulNextID++;
-
-    /* Send to queue (Non-blocking: if full, we drop it or return error) */
-    return xQueueSend( xAperiodicQueue, &xJob, 0 );
+	
+	
+	/* Send to queue (Non-blocking: if full, we drop it or return error) */
+	return xQueueSend( xAperiodicQueue, &xJob, 0 );
 }
 
 static void vPollingServerFunction( void *pvParameters )
@@ -5334,14 +5352,46 @@ static void vPollingServerFunction( void *pvParameters )
             ulCurrentAperiodicID = xJob.ulTaskID;
             xAperiodicJobRunning = pdTRUE;
             taskEXIT_CRITICAL();
-
-            /* 3. Execute the Job */
-            /* If Policy is KILL, the kernel might reset us during this call! */
-            xJob.fn( xJob.param );
-
-            /* 4. Job Finished - Check for OVERRUN logs */
+            
+            // missed deadline, so need to apply policy for the task
+            if(xNow > xAperiodicJobAbsDeadline)
+            {	
+				switch(xAperiodicJobPolicy)
+				{
+					case APERIODIC_POLICY_KILL:
+						/*
+							we print some info about deadline miss, but we don't execute the
+							task since it has to be killed
+						 */
+						tracePOLLING_DEADLINEMISS1(xJob);
+						break;
+					case APERIODIC_POLICY_OVERRUN:
+						// we print some info about deadline miss
+						tracePOLLING_DEADLINEMISS2(xJob);
+						xJob.fn(xJob.param);
+						break;
+					default:
+						break;
+				}
+			}
+			
+			// deadline not missed, so we execute normally without logging
+			else
+			{
+				UART_printf("[POLLING SERVER] no deadline miss for aperiodic task\n");
+				xJob.fn(xJob.param);
+			}
+            
+            
             taskENTER_CRITICAL();
-            xAperiodicJobRunning = pdFALSE; /* Stop monitoring */
+            xAperiodicJobRunning = pdFALSE;
+            taskEXIT_CRITICAL();
+            
+            /*
+            xJob.fn( xJob.param );
+			
+			taskENTER_CRITICAL();
+            xAperiodicJobRunning = pdFALSE;
             taskEXIT_CRITICAL();
 
             xNow = xTaskGetTickCount();
@@ -5349,6 +5399,7 @@ static void vPollingServerFunction( void *pvParameters )
             {
                 tracePOLLING_OVERRUN();
             }
+            */
         }
 
         /* 5. Queue Empty: Suspend self and wait for next Period */
