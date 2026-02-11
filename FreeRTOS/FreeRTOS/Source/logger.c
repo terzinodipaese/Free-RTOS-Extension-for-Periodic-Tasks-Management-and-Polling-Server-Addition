@@ -4,14 +4,14 @@
 #include "task.h"
 
 
-//data
+/* Data */
 static LoggerEntry_t xLoggerBuffer[LOGGER_BUFFER_SIZE];
 
-//indexes usage
+/* Indexes */
 static uint16_t usCount = 0;
 static TickType_t ulIdleTicks = 0;
 
-//pointers 
+/*Ring buffer pointers*/
 static LoggerEntry_t *pxHead = NULL;
 static LoggerEntry_t *pxTail = NULL;
 static const LoggerEntry_t *pxBufferEnd = xLoggerBuffer + LOGGER_BUFFER_SIZE;
@@ -71,12 +71,15 @@ void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, TickType
 static TickType_t lastTick = 0;
 
 void vApplicationIdleHook(void){
-    TickType_t currentTick = xTaskGetTickCount();
-    if(currentTick != lastTick){
-       ulIdleTicks++; 
-       lastTick = currentTick;
-    }
-    
+    ulIdleTicks++; 
+}
+
+void LoggerResetIdleTime(void){
+    ulIdleTicks = 0;
+}
+
+uint32_t ulLoggerGetIdleTime(void){
+    return ulIdleTicks;
 }
 
 
@@ -84,7 +87,6 @@ void vLoggerPrint(void){
 
     static LoggerEntry_t xLocalBuffer[LOGGER_BUFFER_SIZE];
     uint16_t usLocalCount = 0;
-    TickType_t localIdleTicks,lastTimestamp,currentIdleTicks,currentTimestamp = 0;
 
     //copy of the buffer + critical section
     taskENTER_CRITICAL();
@@ -100,8 +102,6 @@ void vLoggerPrint(void){
         }
 
         usLocalCount = usCount;
-        currentIdleTicks = ulIdleTicks;
-        currentTimestamp = xTaskGetTickCount();
 
         //reset pointers
         usCount = 0;
@@ -172,19 +172,6 @@ void vLoggerPrint(void){
          UART_printf(s); 
     }
 
-    //CPU idle 
-    if(lastTimestamp > 0){
-        //added snprintf and used buffer
-        uint32_t idle = ((currentIdleTicks-localIdleTicks)*100U/(currentTimestamp-lastTimestamp)); 
-        
-        if(idle>100) idle = 100;
-        
-        
-        char idle_buffer[64];
-        snprintf(idle_buffer, sizeof(idle_buffer), "CPU idle: %.2f %%\r\n", idle);
-        UART_printf(idle_buffer);
-    }
-
 }
 
 
@@ -201,15 +188,16 @@ void vLoggerTask(void *pvParameters){
 
 //for test suite
 
-bool LoggerHasEvent(LoggerEventType_t type){
-    bool found = false;
+BaseType_t xLoggerHasEvent(LoggerEventType_t type){
+    
+    BaseType_t xFound = pdFALSE;
 
     taskENTER_CRITICAL();
     {
         LoggerEntry_t *p = pxTail;
         for(uint16_t i = 0; i < usCount; i++){
             if(p->eEventType == type){
-                found = true;
+                xFound = true;
                 break;
             }
             p++;
@@ -219,21 +207,21 @@ bool LoggerHasEvent(LoggerEventType_t type){
         }
     }
     taskEXIT_CRITICAL();
-    return found;
+    return xFound;
 }
 
 
 
 
-uint32_t LoggerCountEvent(const char *taskname, LoggerEventType_t type){
-    uint32_t count = 0;
+uint32_t ulLoggerCountEvent(const char *taskname, LoggerEventType_t type){
+    uint32_t ulCount = 0;
 
     taskENTER_CRITICAL();
     {
         LoggerEntry_t *p = pxTail;
         for(uint16_t i = 0;i< usCount;i++){
             if(p->eEventType == type && strcmp(p->pcTaskName,taskname)==0){
-            count++;
+            ulCount++;
         }
             p++;
             if(p >= pxBufferEnd){
@@ -244,9 +232,39 @@ uint32_t LoggerCountEvent(const char *taskname, LoggerEventType_t type){
     
     taskEXIT_CRITICAL();
 
-    return count;
+    return ulCount;
 }
 
-bool LoggerDeadlineMiss(LoggerEventType_t type){
+BaseType_t xLoggerDeadlineMiss(LoggerEventType_t type){
     return LoggerHasEvent(type);
+}
+
+TickType_t xLoggerGetFirstEventTime(const char *taskname, LoggerEventType_t type){
+    
+    TickType_t xFirst = 0;
+
+    taskENTER_CRITICAL();
+
+    {
+        LoggerEntry_t *p = pxTail;
+
+        for(uint16_t i = 0; i < usCount; i++)
+        {
+            if(p->eEventType == type && strcmp(p->pcTaskName, taskname) == 0)
+            {
+                xFirst = p->ulTimestamp;
+                break;
+            }
+
+            p++;
+            if(p >= pxBufferEnd)
+            {
+                p = xLoggerBuffer;
+            }
+        }
+    }
+
+    taskEXIT_CRITICAL();
+
+    return xFirst;  // 0 if not found
 }
