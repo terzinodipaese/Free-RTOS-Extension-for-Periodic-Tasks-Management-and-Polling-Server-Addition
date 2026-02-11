@@ -40,6 +40,7 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
+#include "logger.h"  // LOG: logger library added
 
 /* The default definitions are only available for non-MPU ports. The
  * reason is that the stack alignment requirements vary for different
@@ -1787,6 +1788,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         {
             pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
             // vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
+
+            /* LOG: Log that the job has finished execution */
+            vLoggerStore( pcTaskGetName( pxCfg->pxTaskHandle ), LOGGER_TASK_END, pxCfg->deadline );
             
             taskENTER_CRITICAL();   //Protect access to ulPendingJobs
             {
@@ -5238,10 +5242,11 @@ BaseType_t xTaskIncrementTick( void )
 
 /*-------PRINT OVERRUN (DEBUG)------- */
 //TODO: Remove this part and set it in FreeRTOSConfig.h 
+/*
 #include <stdio.h> 
 #ifndef DBG_UART
 #define DBG_UART
-#include "uart.h"
+//#include "uart.h"  //error?
 #endif
 #ifndef traceTASK_OVERRUN
     #define traceTASK_OVERRUN( pxTCB, policy ) \
@@ -5252,7 +5257,7 @@ BaseType_t xTaskIncrementTick( void )
                  policy );\
                 UART_printf(s);
         
-#endif
+#endif*/
 /*------------------------------------*/
 
 //PEOS HARD KILL */
@@ -5331,6 +5336,9 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
 
                 //Update absolute deadline for this new job
                 pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
+
+                /* LOG: Log that the task has been released (made Ready) */
+                vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
                 
                 //schedule next release
                 pxConfig->xNextRelease += pxConfig->period;
@@ -5347,17 +5355,28 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
 
                 // TODO: Add the Trace call here to log the error (DEADLINE MISS / OVERRUN)
                 //something like 
-                traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy);
+                //traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy); now there's the logger :)
+
+                /* LOG: Log the deadline miss */
+                vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, pxTCB->xDeadline );
+
+
 
                 switch (pxConfig->overrunPolicy)
                 {
                 case POLICY_SKIP:
+                    /* LOG: Log that the task has been skipped */
+                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
+
                     /* Ignore this release. Update xNextRelease to the future (R_k+2) 
                        so it no longer fires for this period*/
                     pxConfig->xNextRelease+=pxConfig->period;
 
                     break;
                 case POLICY_CATCH_UP:
+                    /* LOG: Log that the task is trying to catch up */
+                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
+
                     /* Run this job as soon as possible, incrementing "penidig job and
                        update xNetRelease to maintain the timeframe"*/
                     pxConfig->xNextRelease+=pxConfig->period;
@@ -5365,6 +5384,8 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                     
                     break;
                 case POLICY_KILL:
+                    /* LOG: Log that the task has been killed */
+                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
                     /*Basic implementation (Log and treat as CATCH_UP or SKIP) */
                     /*
                     pxConfig->ulPendingJobs=0;
@@ -5619,6 +5640,12 @@ static void prvUpdateNextPeriodicEventTick( void )
             /* coverity[misra_c_2012_rule_11_5_violation] */
             taskSELECT_HIGHEST_PRIORITY_TASK();
             traceTASK_SWITCHED_IN();
+
+            /* LOG: Log that a task has started/resumed execution on the CPU */
+            if ( pxCurrentTCB != NULL )
+            {
+                vLoggerStore( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
+            }
 
             /* Macro to inject port specific behaviour immediately after
              * switching tasks, such as setting an end of stack watchpoint
