@@ -222,19 +222,18 @@ void vLoggerPrint(void){
          UART_printf(s); 
     }
 
-    // CPU idle calculation
-    if(lastTimestamp > 0 && currentTimestamp > lastTimestamp){
-        // Calculate deltas
-        TickType_t totalDelta = currentTimestamp - lastTimestamp;
-        TickType_t idleDelta = currentIdleTicks - lastIdleTicks;
-
-        uint32_t idle = (idleDelta * 100U) / totalDelta; 
+    // Buffer usage info
+    if (usLocalCount > 0)
+    {
+        uint32_t ulUsagePercent = ((uint32_t)usLocalCount * 100) / LOGGER_BUFFER_SIZE;
         
-        if(idle > 100) idle = 100;
-        
-        char idle_buffer[64];
-        snprintf(idle_buffer, sizeof(idle_buffer), "CPU idle: %lu %%\r\n", (unsigned long)idle);
-        UART_printf(idle_buffer);
+        char usage_buffer[64];
+        snprintf(usage_buffer, sizeof(usage_buffer), 
+                 "Buffer usage: %lu %% (%u/%d)\r\n", 
+                 (unsigned long)ulUsagePercent, 
+                 usLocalCount, 
+                 LOGGER_BUFFER_SIZE);
+        UART_printf(usage_buffer);
     }
 
     // Update lastTimestamp and lastIdleTicks for next iteration
