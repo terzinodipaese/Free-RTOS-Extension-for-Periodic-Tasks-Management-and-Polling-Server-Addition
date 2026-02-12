@@ -1776,32 +1776,70 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
     }
 
     /*Extended version of xTaskCreate(), accepts also deadline and priority as TickType_t*/
-    BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
-                                const char * const pcName,
-                                const configSTACK_DEPTH_TYPE uxStackDepth,
-                                void * const pvParameters,
-                                TickType_t xPeriod,
-                                TickType_t xDeadline,
-                                UBaseType_t uxPriority,
-                                TaskHandle_t * const pxCreatedTask)
+  BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
+                              const char * const pcName,
+                              const configSTACK_DEPTH_TYPE uxStackDepth,
+                              void * const pvParameters,
+                              TickType_t xPeriod,
+                              TickType_t xDeadline,
+                              UBaseType_t uxPriority,
+                              TaskHandle_t * const pxCreatedTask,
+                              OverrunPolicy_t xTaskPolicy)
+{
+    PeriodicWrap_t *cfg = pvPortMalloc(sizeof(*cfg));
+    if (cfg == NULL)
     {
-        PeriodicWrap_t *cfg = pvPortMalloc(sizeof(*cfg));
-        if (cfg == NULL)
-            return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-
-        /*In the custom data type store all the extra parameters and the data regarding the original function*/
-        cfg->fn     = pxTaskCode;
-        cfg->param  = pvParameters;
-        cfg->period = xPeriod;
-        cfg->deadline = xDeadline;
-
-        return xTaskCreate(vPeriodicWrapperTask,
-                        pcName,
-                        uxStackDepth,
-                        cfg,           /*Important! in this param also the pointer to the original function and it's param*/
-                        uxPriority,
-                        pxCreatedTask);
+        return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
     }
+
+    // Inizializza struttura wrapper
+    cfg->fn            = pxTaskCode;
+    cfg->param         = pvParameters;
+    cfg->period        = xPeriod;
+    cfg->deadline      = xDeadline;
+    cfg->overrunPolicy = xTaskPolicy;
+    cfg->ulPendingJobs = 0;
+
+    vListInitialiseItem(&(cfg->xPeriodicListItem));
+    listSET_LIST_ITEM_OWNER(&(cfg->xPeriodicListItem), cfg);
+
+    // Crea il task wrapper
+    BaseType_t xReturn = xTaskCreate(vPeriodicWrapperTask,
+                                    pcName,
+                                    uxStackDepth,
+                                    cfg,
+                                    uxPriority,
+                                    &(cfg->pxTaskHandle));
+
+    if (xReturn == pdPASS)
+    {
+        TickType_t now = xTaskGetTickCount();
+
+        cfg->xNextRelease  = now + xPeriod;
+        cfg->xNextDeadline = now + xDeadline;
+        cfg->uxPriority    = uxPriority;
+        cfg->uxStackDepth  = uxStackDepth;
+
+        taskENTER_CRITICAL();
+        {
+            vListInsertEnd(&pxPeriodicTasksList, &(cfg->xPeriodicListItem));
+            xNextPeriodicEventTick = 0;
+        }
+        taskEXIT_CRITICAL();
+
+        // Restituisci l'handle al chiamante
+        if (pxCreatedTask != NULL)
+        {
+            *pxCreatedTask = cfg->pxTaskHandle;
+        }
+    }
+    else
+    {
+        vPortFree(cfg);
+    }
+
+    return xReturn;
+}
 
 
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,

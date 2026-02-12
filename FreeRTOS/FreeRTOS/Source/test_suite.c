@@ -154,9 +154,8 @@ void vTask_Generic(void *pvParameters)
     
     if(!bIsTestRunning()) return;
     
-    vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_START, 0);
     BusyMs(exec_ms);
-    vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_END, 0);
+
 }
 
 /**
@@ -169,9 +168,9 @@ void vTask_Aperiodic(void *pvParameters)
 
     if(!bIsTestRunning()) return;
     
-    vLoggerStore(pParam->pcName, LOGGER_TASK_START, 0);
+    //vLoggerStore(pParam->pcName, LOGGER_TASK_START, 0);
     BusyMs(pParam->ms);
-    vLoggerStore(pParam->pcName, LOGGER_TASK_END, 0);
+    //vLoggerStore(pParam->pcName, LOGGER_TASK_END, 0);
 }
 
 /* Cleanup functions */
@@ -787,8 +786,7 @@ static TestResult_t xTest_AperiodicWithPeriodicTasks(void)
 
     static AperiodicTaskData_t aTask = {"APER_MIX", 5};
     
-    for(int i = 0; i < 5; i++)
-    {
+    for(int i = 0; i < 5; i++){
         xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_OVERRUN);
         vTaskDelay(pdMS_TO_TICKS(60));
     }
@@ -824,10 +822,10 @@ static TestResult_t xTest_ConfigBasic(void)
 
     vTestStart();
     
-    SchedulerConfig_t cfg {
+    SchedulerConfig_t cfg = {
         .globalPolicy = POLICY_SKIP,
         .trace_enabled = pdTRUE,
-        .max_tasks = 4,
+        .max_tasks = 20,
         .pxTasks = (PeriodicTaskConfig_t[]) {
             {vTask_Generic,"CfgA",(void*)5, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(20), pdMS_TO_TICKS(20)},
             {vTask_Generic,"CfgB",(void*)8, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(30), pdMS_TO_TICKS(30)},
@@ -871,13 +869,12 @@ static TestResult_t xTest_ConfigPriorities(void)
     SchedulerConfig_t cfg = {
         .globalPolicy = POLICY_SKIP,
         .trace_enabled = pdTRUE,
-        .maxTasks = 4,
+        .max_tasks = 20,
         .pxTasks = (PeriodicTaskConfig_t[]) {
-            {vTask_Generic,"P1",(void*)5, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {vTask_Generic,"P3",(void*)5, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {vTask_Generic,"P5",(void*)5, 512, tskIDLE_PRIORITY+5, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
-        },
-        .uxNumTasks = 3
+            {"P1",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
+            {"P3",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
+            {"P5",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+5, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
+        }
     };
     
     vConfigureScheduler(&cfg);
@@ -915,18 +912,17 @@ static TestResult_t xTest_ConfigMaxTasks(void)
     SchedulerConfig_t cfg = {
         .globalPolicy = POLICY_SKIP,
         .trace_enabled = pdTRUE,
-        .maxTasks = 8,
+        .max_tasks = 20,
         .pxTasks =(PeriodicTaskConfig_t[]) {
-            {vTask_Generic,"M1", (void*)5,  512, tskIDLE_PRIORITY+4, pdMS_TO_TICKS(50),  pdMS_TO_TICKS(50)},
-            {vTask_Generic,"M2", (void*)8,  512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(100), pdMS_TO_TICKS(100)},
-            {vTask_Generic,"M3", (void*)12, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(150), pdMS_TO_TICKS(150)},
-            {vTask_Generic,"M4", (void*)15, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(200), pdMS_TO_TICKS(200)},
-            {vTask_Generic,"M5", (void*)18, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(250), pdMS_TO_TICKS(250)},
-            {vTask_Generic,"M6", (void*)20, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(300), pdMS_TO_TICKS(300)},
-            {vTask_Generic,"M7", (void*)25, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(400), pdMS_TO_TICKS(400)},
-            {vTask_Generic,"M8", (void*)30, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(500), pdMS_TO_TICKS(500)}
-        },
-        .uxNumTasks = 8
+            {"M1",vTask_Generic, (void*)5,  512, tskIDLE_PRIORITY+4, pdMS_TO_TICKS(50),  pdMS_TO_TICKS(50)},
+            {"M2",vTask_Generic, (void*)8,  512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(100), pdMS_TO_TICKS(100)},
+            {"M3",vTask_Generic, (void*)12, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(150), pdMS_TO_TICKS(150)},
+            {"M4",vTask_Generic, (void*)15, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(200), pdMS_TO_TICKS(200)},
+            {"M5",vTask_Generic, (void*)18, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(250), pdMS_TO_TICKS(250)},
+            {"M6",vTask_Generic, (void*)20, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(300), pdMS_TO_TICKS(300)},
+            {"M7",vTask_Generic, (void*)25, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(400), pdMS_TO_TICKS(400)},
+            {"M8",vTask_Generic, (void*)30, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(500), pdMS_TO_TICKS(500)}
+        }
     };
 
     vConfigureScheduler(&cfg);
@@ -978,12 +974,11 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     SchedulerConfig_t cfg = {
         .globalPolicy = POLICY_SKIP,
         .trace_enabled = pdTRUE,
-        .maxTasks = 4,
+        .max_tasks = 20,
         .pxTasks = {
-            {vTask_Generic,"Cfg1",  (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {vTask_Generic,"Cfg1",  (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
-        },
-        .uxNumTasks = 2
+            {"Cfg1",vTask_Generic, (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
+            {"Cfg2",vTask_Generic, (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
+        }
     };
     
     vTestStart();
