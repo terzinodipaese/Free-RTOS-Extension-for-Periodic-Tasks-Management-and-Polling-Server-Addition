@@ -156,8 +156,13 @@ SOURCE_FILES += $(DEMO_PROJECT)/test_suite.c
 # Start-up code
 SOURCE_FILES += ./startup.c
 
+<<<<<<< HEAD
 
 
+=======
+# Logger library
+SOURCE_FILES += $(KERNEL_DIR)/logger.c
+>>>>>>> dev3_logger
 
 # Create list of object files with the same names of the sources
 OBJS = $(SOURCE_FILES:%.c=%.o)

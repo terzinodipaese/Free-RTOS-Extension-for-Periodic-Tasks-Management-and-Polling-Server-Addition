@@ -1,2 +1,6 @@
 *.vscode
+<<<<<<< HEAD
 Demo/Output/
+=======
+Demo/Output/
+>>>>>>> dev3_logger

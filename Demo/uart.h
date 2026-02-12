@@ -1,6 +1,8 @@
 #ifndef __PRINTF__
 #define __PRINTF__
 
+#define DBG_UART;
+
 #include "FreeRTOS.h"
 
 #define UART0_ADDRESS                         ( 0x40004000UL )

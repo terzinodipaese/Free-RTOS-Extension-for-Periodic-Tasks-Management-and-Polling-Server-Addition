@@ -40,7 +40,11 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
+<<<<<<< HEAD
 #include "logger.h"
+=======
+#include "logger.h"  // LOG: logger library added
+>>>>>>> dev3_logger
 
 /* The default definitions are only available for non-MPU ports. The
  * reason is that the stack alignment requirements vary for different
@@ -365,6 +369,7 @@
         }                                                                                    \
     } while( 0 )
 #endif /* #if ( configNUMBER_OF_CORES > 1 ) */
+
 /*-----------------------------------------------------------*/
 
 /*
@@ -396,6 +401,11 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
 
     TickType_t xPeriod;                         /**< Task period PEOS */
     TickType_t xDeadline;                       /**< Task deadline PEOS */
+
+    TickType_t xNextRelease;                    /**< When the periodic task is going to be released next */
+    TickType_t xNextDeadline;                   /**< The next deadline of the periodic task */
+
+    BaseType_t xIsPeriodic;                     /**< Flag for periodic task */
 
     #if ( configUSE_TASK_PREEMPTION_DISABLE == 1 )
         BaseType_t xPreemptionDisable; /**< Used to prevent the task from being preempted. */
@@ -483,6 +493,9 @@ PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Po
 PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /**< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
+PRIVILEGED_DATA static List_t pxPeriodicTasksList;                       /**< List of all periodic tasks */
+PRIVILEGED_DATA static TickType_t xNextPeriodicEventTick = portMAX_DELAY;/**< Tracking the next time the periodic scheduler needs to do something */
+
 #if ( INCLUDE_vTaskDelete == 1 )
 
     PRIVILEGED_DATA static List_t xTasksWaitingTermination; /**< Tasks that have been deleted - but their memory not yet freed. */
@@ -545,6 +558,9 @@ PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime[ conf
 /*-----------------------------------------------------------*/
 
 /* File private functions. --------------------------------*/
+
+static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount ) PRIVILEGED_FUNCTION;
+static void prvUpdateNextPeriodicEventTick( void ) PRIVILEGED_FUNCTION;
 
 /*
  * Creates the idle tasks during scheduler start.
@@ -1749,12 +1765,26 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         void *param;            /*< Original parameter*/
         TickType_t period;      /*< Period */
         TickType_t deadline;    /*< Deadline */
+        /* Runtime State (Required for the Patch) */
+        TaskHandle_t pxTaskHandle;   /* The handle of the task we created */
+        TickType_t xNextRelease;    /* The absolute tick for next release */
+        TickType_t xNextDeadline;   /* The absolute tick for next deadline */
+        UBaseType_t uxPriority;     /* Store priority for yield checks */
+        configSTACK_DEPTH_TYPE uxStackDepth; /* Store stack depth for child tasks */
+        ListItem_t xPeriodicListItem; /* Dedicated item for pxPeriodicTasksList */
+
+        OverrunPolicy_t overrunPolicy; /* task's policy*/
+        volatile uint32_t ulPendingJobs; //CATCH_UP counter
     } PeriodicWrap_t;
+
+    //PEOS global var to default config
+    static OverrunPolicy_t xGlobalOverrunPolicy= POLICY_SKIP; 
 
     static void vPeriodicWrapperTask(void *pvParameters)
     {
-        PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
-        vPortFree(pvParameters);                 // free small helper struct
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
+        // vPortFree(pvParameters);                 // free small helper struct // we actually need this
+
 
         TickType_t last = xTaskGetTickCount();
 
@@ -1765,6 +1795,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
         for (;;)
         {
+<<<<<<< HEAD
             vLoggerStore(pcName, LOGGER_TASK_START, 0);
 
             cfg.fn(cfg.param);                      /*Call the original function with the original parameters */
@@ -1772,10 +1803,63 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             vLoggerStore(pcName, LOGGER_TASK_END, 0);
 
             vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
+=======
+            pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
+            // vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
+
+            /* LOG: Log that the job has finished execution */
+            vLoggerStore( pcTaskGetName( pxCfg->pxTaskHandle ), LOGGER_TASK_END, pxCfg->deadline );
+            
+            taskENTER_CRITICAL();   //Protect access to ulPendingJobs
+            {
+                if(pxCfg->ulPendingJobs>0)
+                {
+                    /*CATCH_UP: not suspending ourself*/
+                    pxCfg->ulPendingJobs--;
+                }
+                else{
+                    vTaskSuspend(NULL); /*Suspend itself, the scheduler patch will resume it at the right time*/
+                }
+            }
+            taskEXIT_CRITICAL();
+
+           // vTaskSuspend(NULL); DA RIM                  
+        }
+    }
+
+    /*PEOS set global policy and call xTaskCreatePeriodic to manage tasks*/
+    void vConfigureScheduler( SchedulerConfig_t *pxCfg){
+        if(pxCfg!=NULL)
+        {
+            xGlobalOverrunPolicy=pxCfg->globalPolicy;
+            
+            for(UBaseType_t i=0;i<pxCfg->uxNumTasks;i++)
+            {
+                PeriodicTaskConfig_t *t=&(pxCfg->pxTasks[i]);
+                TickType_t deadline;
+                if(t->xDeadline>0)
+                    deadline=t->xDeadline;
+                else
+                    deadline=t->xPeriod;
+                
+                xTaskCreatePeriodic(
+                    t->pxTaskCode,
+                    t->pcName,
+                    t->usStackDepth,
+                    t->pvParameters,
+                    t->xPeriod,
+                    deadline,
+                    t->uxPriority,
+                    NULL,
+                    t->xTaskPolicy
+                );
+            }
+>>>>>>> dev3_logger
         }
     }
 
     /*Extended version of xTaskCreate(), accepts also deadline and priority as TickType_t*/
+<<<<<<< HEAD
   BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
                               const char * const pcName,
                               const configSTACK_DEPTH_TYPE uxStackDepth,
@@ -1790,6 +1874,63 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
     if (cfg == NULL)
     {
         return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+=======
+    BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
+                                const char * const pcName,
+                                const configSTACK_DEPTH_TYPE uxStackDepth,
+                                void * const pvParameters,
+                                TickType_t xPeriod,
+                                TickType_t xDeadline,
+                                UBaseType_t uxPriority,
+                                TaskHandle_t * const pxCreatedTask,
+                                OverrunPolicy_t xTaskPolicy)
+    {
+        PeriodicWrap_t *cfg = pvPortMalloc(sizeof(*cfg));
+        if (cfg == NULL)
+            return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+
+        /*In the custom data type store all the extra parameters and the data regarding the original function*/
+        cfg->fn     = pxTaskCode;
+        cfg->param  = pvParameters;
+        cfg->period = xPeriod;
+        cfg->deadline = xDeadline;
+
+        cfg->overrunPolicy=xTaskPolicy;    
+        cfg->ulPendingJobs= 0;   //no pending jobs at start
+
+        /* Initialize the list item so it can be inserted into the shadow list */
+        vListInitialiseItem( &( cfg->xPeriodicListItem ) );
+        listSET_LIST_ITEM_OWNER( &( cfg->xPeriodicListItem ), cfg );
+
+        BaseType_t xReturn = xTaskCreate(vPeriodicWrapperTask, pcName, uxStackDepth, cfg, uxPriority, &(cfg->pxTaskHandle));
+
+        // return xTaskCreate(vPeriodicWrapperTask,
+        //                 pcName,
+        //                 uxStackDepth,
+        //                 cfg,           /*Important! in this param also the pointer to the original function and it's param*/
+        //                 uxPriority,
+        //                 pxCreatedTask);
+        if( xReturn == pdPASS )
+        {
+            cfg->xNextRelease = xTaskGetTickCount() + xPeriod;
+            cfg->xNextDeadline = xTaskGetTickCount() + xDeadline;
+            cfg->uxPriority = uxPriority;
+            cfg->uxStackDepth = uxStackDepth;
+
+            taskENTER_CRITICAL();
+            {
+                /* Add to the shadow list for tracking */
+                vListInsertEnd( &pxPeriodicTasksList, &( cfg->xPeriodicListItem ) );
+                xNextPeriodicEventTick = 0; /* Force re-evaluation on next tick */
+            }
+            taskEXIT_CRITICAL();
+        }
+        else 
+        {
+            vPortFree(cfg);
+        }
+        return xReturn;
+>>>>>>> dev3_logger
     }
 
     // Inizializza struttura wrapper
@@ -1876,9 +2017,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         traceRETURN_xTaskCreate( xReturn );
         
         /*Unwrap the config to store period and deadline inside the TCB*/
-        PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
-        pxNewTCB->xPeriod = cfg.period;
-        pxNewTCB->xDeadline = cfg.deadline;
+        // PeriodicWrap_t cfg = *(PeriodicWrap_t *)pvParameters;
+        // pxNewTCB->xPeriod = cfg.period;
+        // pxNewTCB->xDeadline = cfg.deadline;
         return xReturn;
     }
 
@@ -2208,6 +2349,23 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     else
     {
         mtCOVERAGE_TEST_MARKER();
+    }
+
+    if( ( TaskFunction_t ) pxTaskCode == ( TaskFunction_t ) vPeriodicWrapperTask )
+    {
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
+
+        /* Link the TCB to our configuration struct */
+        pxNewTCB->xPeriod = pxCfg->period;
+        pxNewTCB->xDeadline = pxCfg->deadline;
+        pxNewTCB->xIsPeriodic = pdTRUE;
+
+        /* THIS IS THE MISSING LINK: Store the TCB address in the handle */
+        pxCfg->pxTaskHandle = ( TaskHandle_t ) pxNewTCB;
+    }
+    else
+    {
+        pxNewTCB->xIsPeriodic = pdFALSE;
     }
 }
 /*-----------------------------------------------------------*/
@@ -4923,9 +5081,26 @@ BaseType_t xTaskIncrementTick( void )
          * block. */
         const TickType_t xConstTickCount = xTickCount + ( TickType_t ) 1;
 
+
         /* Increment the RTOS tick, switching the delayed and overflowed
          * delayed lists if it wraps to 0. */
         xTickCount = xConstTickCount;
+
+        /** Periodic task handling */
+        // TO-DO: add to config file
+        //PEOS wake up suspended task
+
+        #if( defined(configUSE_PERIODIC_SCHEDULER) && (configUSE_PERIODIC_SCHEDULER == 1))
+            /* Pass the new current time to your handler function */
+            prvProcessPeriodicTasks(xConstTickCount);
+        #endif
+
+
+        if( xConstTickCount >= xNextPeriodicEventTick)
+        {
+            // Iterate over periodic tasks
+            xSwitchRequired = prvProcessPeriodicTasks( xConstTickCount );
+        }
 
         if( xConstTickCount == ( TickType_t ) 0U )
         {
@@ -5150,6 +5325,212 @@ BaseType_t xTaskIncrementTick( void )
 }
 /*-----------------------------------------------------------*/
 
+/*-------PRINT OVERRUN (DEBUG)------- */
+//TODO: Remove this part and set it in FreeRTOSConfig.h 
+/*
+#include <stdio.h> 
+#ifndef DBG_UART
+#define DBG_UART
+#include "uart.h"  //error?
+#endif
+#ifndef traceTASK_OVERRUN
+    #define traceTASK_OVERRUN( pxTCB, policy ) \
+    char s[100];\
+        sprintf(s,"[ %u ] %s OVERRUN -> Policy: %d\n", \
+                xTaskGetTickCount(), \
+                ( pxTCB )->pcTaskName, \
+                 policy );\
+                UART_printf(s);
+        
+#endif*/
+/*------------------------------------*/
+
+//PEOS HARD KILL */
+static void prvHardResetTask( TCB_t *pxTCB, PeriodicWrap_t *pxConfig )
+{
+    //Remove task from list
+    if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+    {
+        taskRESET_READY_PRIORITY( pxTCB->uxPriority );
+    }
+    
+    //If it's waiting for events, let's remove it from there too
+    if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+    {
+        ( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+    }
+
+    // STACK RESET 
+    //Calculate the pointer to the end of the allocated stack
+    StackType_t *pxTopOfStack = pxTCB->pxStack + ( pxConfig->uxStackDepth - ( uint32_t ) 1 );
+    
+    //Memory alignment
+    pxTopOfStack = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
+
+    //Call the PORT function to write the initial registers back to the stack.
+    //IMPORTANT: pxTaskCode must be the WRAPPER (vPeriodicWrapperTask),
+    //pvParameters must be the configuration structure.
+
+    //This configuration is ok even if it is sign wrong by VSCODE
+    pxTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, vPeriodicWrapperTask, ( void * ) pxConfig);
+   
+    // Reset internal counters
+    pxConfig->ulPendingJobs = 0; 
+    
+    // Put the task in the SUSPENDED list
+    // Wake up only when prvProcessPeriodicTasks decides to release in the next period.
+    vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
+}
+
+static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
+{
+    ListItem_t * pxIterator;
+    /* Cast to remove const qualifier warning */
+    ListItem_t * const pxListEnd = ( ListItem_t * ) listGET_END_MARKER( &pxPeriodicTasksList );
+    PeriodicWrap_t * pxConfig;
+    BaseType_t xYieldRequired = pdFALSE;
+    TCB_t * pxTCB;
+
+    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+         pxIterator != pxListEnd; 
+         pxIterator = listGET_NEXT( pxIterator ) )
+    {
+        pxConfig = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+        
+        if(pxConfig->pxTaskHandle==NULL) continue;
+
+        pxTCB = ( TCB_t * ) pxConfig->pxTaskHandle;
+
+        /* 2. Check for RELEASE TIME (R_k) */
+        if( xTickCount >= pxConfig->xNextRelease )
+        {
+            /* INTERNAL CHECK: Is the task in the suspended list? */
+            if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
+            {
+                //IMPORTANT: HARD KILL 
+                //If the policy is KILL, we reset the stack NOW, before starting it.
+                //This corrects the value of pxTopOfStack that was contaminated
+                // by the last context switch.
+                if( pxConfig->overrunPolicy == POLICY_KILL )
+                {
+                    prvHardResetTask( pxTCB, pxConfig );
+                }
+                /* SUCCESS: Resume directly without calling vTaskResume API */
+                ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+                prvAddTaskToReadyList( pxTCB );
+
+                //Update absolute deadline for this new job
+                pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
+
+                /* LOG: Log that the task has been released (made Ready) */
+                vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
+                
+                //schedule next release
+                pxConfig->xNextRelease += pxConfig->period;
+
+                /* If the released task has higher priority, we must yield later */
+                if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
+                {
+                    xYieldRequired = pdTRUE;
+                }
+            }
+            else
+            {
+                /* OVERRUN: Task did not suspend itself in time */
+
+                // TODO: Add the Trace call here to log the error (DEADLINE MISS / OVERRUN)
+                //something like 
+                //traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy); now there's the logger :)
+
+                /* LOG: Log the deadline miss */
+                vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, pxTCB->xDeadline );
+
+
+
+                switch (pxConfig->overrunPolicy)
+                {
+                case POLICY_SKIP:
+                    /* LOG: Log that the task has been skipped */
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
+
+                    /* Ignore this release. Update xNextRelease to the future (R_k+2) 
+                       so it no longer fires for this period*/
+                    pxConfig->xNextRelease+=pxConfig->period;
+
+                    break;
+                case POLICY_CATCH_UP:
+                    /* LOG: Log that the task is trying to catch up */
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
+
+                    /* Run this job as soon as possible, incrementing "penidig job and
+                       update xNetRelease to maintain the timeframe"*/
+                    pxConfig->xNextRelease+=pxConfig->period;
+                    pxConfig->ulPendingJobs++;
+                    
+                    break;
+                case POLICY_KILL:
+                    /* LOG: Log that the task has been killed */
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
+                    /*Basic implementation (Log and treat as CATCH_UP or SKIP) */
+                    /*
+                    pxConfig->ulPendingJobs=0;
+                    pxConfig->xNextRelease+=pxConfig->period;
+                    */
+                    /*------HARD VERSION-------- */
+
+                    //Reset task (Stack Rewind)
+                    prvHardResetTask(pxTCB,pxConfig);
+                    
+                    // Schedule the next release (skip the current one)
+                    
+                    //Restart at the next period:
+                    pxConfig->xNextRelease+=pxConfig->period;
+
+                    //If the killed task was the running one, we need to force a context switch
+                    if( pxTCB == pxCurrentTCB )
+                    {
+                        xYieldRequired=pdTRUE;    
+                    }
+                    /*---------------------------*/
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+
+    /* 4. Optimization: Update the global next event time */
+    prvUpdateNextPeriodicEventTick();
+
+    return xYieldRequired;
+}
+
+/*-----------------------------------------------------------*/
+
+static void prvUpdateNextPeriodicEventTick( void )
+{
+    ListItem_t * pxIterator;
+    ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
+    TickType_t xMinTick = portMAX_DELAY;
+
+    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+         pxIterator != pxListEnd; 
+         pxIterator = listGET_NEXT( pxIterator ) )
+    {
+        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+
+        /* Find the soonest release time in the entire shadow list */
+        if( pxCfg->xNextRelease < xMinTick )
+        {
+            xMinTick = pxCfg->xNextRelease;
+        }
+    }
+    xNextPeriodicEventTick = xMinTick;
+}
+
+/*-----------------------------------------------------------*/
+
 #if ( configUSE_APPLICATION_TASK_TAG == 1 )
 
     void vTaskSetApplicationTaskTag( TaskHandle_t xTask,
@@ -5344,6 +5725,12 @@ BaseType_t xTaskIncrementTick( void )
             /* coverity[misra_c_2012_rule_11_5_violation] */
             taskSELECT_HIGHEST_PRIORITY_TASK();
             traceTASK_SWITCHED_IN();
+
+            /* LOG: Log that a task has started/resumed execution on the CPU */
+            if ( pxCurrentTCB != NULL )
+            {
+                vLoggerStoreFromISR( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
+            }
 
             /* Macro to inject port specific behaviour immediately after
              * switching tasks, such as setting an end of stack watchpoint
@@ -6254,6 +6641,9 @@ static void prvInitialiseTaskLists( void )
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );
     vListInitialise( &xPendingReadyList );
+
+    vListInitialise( &pxPeriodicTasksList );
+    xNextPeriodicEventTick = portMAX_DELAY;
 
     #if ( INCLUDE_vTaskDelete == 1 )
     {
