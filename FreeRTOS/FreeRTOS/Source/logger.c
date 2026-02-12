@@ -37,7 +37,7 @@ void vLoggerInit(void){
                     "Logger",
                     256,
                     NULL,
-                    tskIDLE_PRIORITY + 1, //add +1
+                    tskIDLE_PRIORITY, //add +1
                     &xLoggerTaskHandle);
 
 }
@@ -78,7 +78,7 @@ void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, v
 {
     //check if buffer is initialized
     if (pxHead == NULL) return;
-    
+
     UBaseType_t uxSavedInterruptStatus;
     
     uxSavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR(); 

@@ -4,8 +4,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define LOGGER_BUFFER_SIZE 100
-#define LOGGER_PRINT_PERIOD_MS 500
+#define LOGGER_BUFFER_SIZE 1000
+#define LOGGER_PRINT_PERIOD_MS 100
 
 
 typedef enum {
