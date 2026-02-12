@@ -2,29 +2,8 @@
 #include "task.h"
 #include <stdio.h>
 #include "uart.h"
-<<<<<<< HEAD
-#include "logger.h"
-
-
-#ifdef TEST_SUITE
-#include "test_suite.h"
-#endif
-
-extern BaseType_t xTaskCreatePeriodic( TaskFunction_t pxTaskCode,
-                                    const char * const pcName,
-                                    const configSTACK_DEPTH_TYPE uxStackDepth,
-                                    void * const pvParameters,
-                                    TickType_t xPeriod,
-                                    TickType_t xDeadline,
-                                    UBaseType_t uxPriority,
-                                    TaskHandle_t * const pxCreatedTask );
-
-extern TickType_t xTaskGetPeriod( TaskHandle_t xTask );
-extern TickType_t xTaskGetDeadline( TaskHandle_t xTask );
-=======
 //X DEBUG
 #include <stdio.h>
->>>>>>> dev3_logger
 
 #define mainTASK_PRIORITY    ( tskIDLE_PRIORITY + 2 )
 
@@ -82,13 +61,8 @@ int main(int argc, char **argv){
 
 	TaskHandle_t xHandle1;
 
-<<<<<<< HEAD
-	
-	xTaskCreatePeriodic(HelloTask, "MyTask", 2048, NULL, pdMS_TO_TICKS(100), pdMS_TO_TICKS(250), 2, &xHandle1);
-=======
 	UART_init();
 	//xTaskCreatePeriodic(HelloTask, "MyTask", 2048, NULL, pdMS_TO_TICKS(100), pdMS_TO_TICKS(250), 2, &xHandle1);
->>>>>>> dev3_logger
 	//xTaskSetPeriod(xHandle1, 1000);
 	//xTaskCreatePeriodic(HelloTask2, "MyTask2", 2048, NULL, pdMS_TO_TICKS(450), 2, NULL);
 

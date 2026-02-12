@@ -147,7 +147,7 @@ SOURCE_FILES += $(KERNEL_DIR)/portable/GCC/ARM_CM3/port.c
 # Demo files
 SOURCE_FILES += $(DEMO_PROJECT)/main.c
 SOURCE_FILES += $(DEMO_PROJECT)/uart.c
-SOURCE_FILES += $(DEMO_PROJECT)/logger.c #added
+#SOURCE_FILES += $(DEMO_PROJECT)/logger.c #added
 SOURCE_FILES += $(DEMO_PROJECT)/test_suite.c
 
 
@@ -156,13 +156,8 @@ SOURCE_FILES += $(DEMO_PROJECT)/test_suite.c
 # Start-up code
 SOURCE_FILES += ./startup.c
 
-<<<<<<< HEAD
-
-
-=======
 # Logger library
 SOURCE_FILES += $(KERNEL_DIR)/logger.c
->>>>>>> dev3_logger
 
 # Create list of object files with the same names of the sources
 OBJS = $(SOURCE_FILES:%.c=%.o)
@@ -185,39 +180,39 @@ all: $(ELF)
 
 
 $(ELF): $(OBJS_OUTPUT) ./mps2_m3.ld Makefile
-   echo "\n\n--- Final linking ---\n"
-   $(LD) $(LDFLAGS) $(OBJS_OUTPUT) -o $(ELF)
-   $(SIZE) $(ELF)
+	echo "\n\n--- Final linking ---\n"
+	$(LD) $(LDFLAGS) $(OBJS_OUTPUT) -o $(ELF)
+	$(SIZE) $(ELF)
 
 
 $(OUTPUT_DIR)/%.o : %.c  Makefile $(OUTPUT_DIR)
-   $(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 
 $(TEST_OUTPUT_DIR)/%.o : %.c  Makefile $(TEST_OUTPUT_DIR)
-   $(CC) $(CFLAGS) -DTEST_SUITE -c $< -o $@
+	$(CC) $(CFLAGS) -DTEST_SUITE -c $< -o $@
 
 
 $(OUTPUT_DIR) $(TEST_OUTPUT_DIR):
-   mkdir -p $@
+	mkdir -p $@
 
 
 cleanobj:
-   rm -f $(OUTPUT_DIR)/*.o $(TEST_OUTPUT_DIR)/*.o
+	rm -f $(OUTPUT_DIR)/*.o $(TEST_OUTPUT_DIR)/*.o
 
 
 clean:
-   rm -rf $(ELF) $(MAP) $(OUTPUT_DIR)/*.o $(OUTPUT_DIR) $(TEST_OUTPUT_DIR) $(TEST_MAP) $(TEST_ELF)
+	rm -rf $(ELF) $(MAP) $(OUTPUT_DIR)/*.o $(OUTPUT_DIR) $(TEST_OUTPUT_DIR) $(TEST_MAP) $(TEST_ELF)
 
 
 qemu_start:
-   qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
-   $(ELF) -monitor none -nographic -serial stdio
+	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
+	$(ELF) -monitor none -nographic -serial stdio
 
 
 qemu_debug:
-   qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
-   $(ELF) -monitor none -nographic -serial stdio $(QEMU_FLAGS_DBG)
+	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
+	$(ELF) -monitor none -nographic -serial stdio $(QEMU_FLAGS_DBG)
 
 
 gdb_start:
@@ -240,23 +235,23 @@ test-build: $(TEST_ELF)
 
 
 $(TEST_ELF): $(TEST_OBJS_OUTPUT) ./mps2_m3.ld Makefile
-   @echo "\n\n--- Linking TEST SUITE ---\n"
-   $(LD) -T ./mps2_m3.ld -nostartfiles -specs=nano.specs -specs=nosys.specs \
-       -Xlinker -Map=$(TEST_MAP) -Xlinker --gc-sections -mcpu=$(CPU) -mthumb \
-       $(TEST_OBJS_OUTPUT) -o $(TEST_ELF)
-   $(SIZE) $(TEST_ELF)
+	@echo "\n\n--- Linking TEST SUITE ---\n"
+	$(LD) -T ./mps2_m3.ld -nostartfiles -specs=nano.specs -specs=nosys.specs \
+		-Xlinker -Map=$(TEST_MAP) -Xlinker --gc-sections -mcpu=$(CPU) -mthumb \
+    	$(TEST_OBJS_OUTPUT) -o $(TEST_ELF)
+	$(SIZE) $(TEST_ELF)
 
 
 
 
 test-run: test-build
-   @echo "\n---Running Test suite in QEMU--\n"
-   qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
-   $(TEST_ELF) -monitor none -nographic -serial stdio
+	@echo "\n---Running Test suite in QEMU--\n"
+	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
+	$(TEST_ELF) -monitor none -nographic -serial stdio
 
 
 test-clean:
-   rm -f $(TEST_ELF) $(TEST_MAP) $(TEST_OUTPUT_DIR)/*.o
+	rm -f $(TEST_ELF) $(TEST_MAP) $(TEST_OUTPUT_DIR)/*.o
 
 
 test: test-build test-run
