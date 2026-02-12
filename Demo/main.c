@@ -98,6 +98,10 @@ void vBusyWait( int ticks_simulated )
     }
 }
 
+void aperiodicFromTask( void *pvParameters){
+    UART_printf("Aperiodica spawnata da task \n");
+}
+
 /* Task di Test per Policy KILL */
 void vTestTask( void *pvParameters )
 {
@@ -142,17 +146,39 @@ void vTestTask2( void *pvParameters )
 	UART_printf(s);
 }
 
+void vSpawnAperiodic(void *pvParameters){
+    const char *pcName = (const char *) pvParameters;
+    
+	char s[80];
+
+    /* 1. START MSG */
+    sprintf(s,"[%lu] %s: START Job\n", xTaskGetTickCount(), pcName);
+    UART_printf(s);
+
+    //spawn task
+    xTaskCreateAperiodic(aperiodicFromTask, NULL, 1, APERIODIC_POLICY_OVERRUN, xTaskGetTickCount());
+    UART_printf("Task spawner finita");
+
+}
+
 void aperiodic( void *pvParameters ) {
+    UART_printf("Aperiodic 1 start\n");
 	(void) pvParameters;
-	const TickType_t xDelay = 30 / portTICK_PERIOD_MS;
-	vTaskDelay(xDelay);
-    UART_printf("Aperiodic 1 executed\n");
+	const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
+	vBusyWait(5000);
+    UART_printf("Aperiodic 1 end\n");
+    
 }
 
 void aperiodic2( void *pvParameters ) {
 	(void) pvParameters;
-    UART_printf("Aperiodic 2 executed\n");
+    UART_printf("Aperiodic 2 start\n");
+    vTaskDelay(10);
+    UART_printf("Aperiodic 2 end\n");
+
 }
+
+
 
 void aperiodic3( void *pvParameters ) {
 	(void) pvParameters;
@@ -191,6 +217,7 @@ void aperiodic8( void *pvParameters ) {
 }
 
 
+
 /* ===========================================================
  * MAIN
  * =========================================================== */
@@ -217,11 +244,11 @@ int main( void )
         { 
             .pcName = "TASK_SKIP",
             .pxTaskCode = vTestTask2,
-            .pvParameters = "TASK_SKIP",
+            .pvParameters = "PISELLO GIGANTE",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
             /* Priorità leggermente più alta per vederlo emergere nel log */
             //.uxPriority = 2, 
-			.uxPriority = 1,    
+			.uxPriority = 2,    
             .xPeriod = 100,      
             .xDeadline = 500,
 			.xTaskPolicy = POLICY_SKIP
@@ -230,11 +257,11 @@ int main( void )
 
         //TASK 3: POLICY CATCH_UP (2) 
         { 
-            .pcName = "TASK_CATCH",
-            .pxTaskCode = vTestTask,
-            .pvParameters = "TASK_CATCH",
+            .pcName = "SPAWN_APERIODIC",
+            .pxTaskCode = vSpawnAperiodic,
+            .pvParameters = "SPAWN_APERIODIC",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority = 2,
+            .uxPriority = 1,
             .xPeriod = 100,      
             .xDeadline = 100,
             .xTaskPolicy = POLICY_CATCH_UP 
@@ -256,14 +283,17 @@ int main( void )
 	
     xCreatePollingServer(20, 20, 1);
 
-    xTaskCreateAperiodic(aperiodic, NULL, 1, APERIODIC_POLICY_OVERRUN);
-    xTaskCreateAperiodic(aperiodic2, NULL, 1, APERIODIC_POLICY_KILL);
-    xTaskCreateAperiodic(aperiodic3, NULL, 1, APERIODIC_POLICY_OVERRUN);
-    xTaskCreateAperiodic(aperiodic4, NULL, 1, APERIODIC_POLICY_KILL);
-    xTaskCreateAperiodic(aperiodic5, NULL, 1, APERIODIC_POLICY_OVERRUN);
-    xTaskCreateAperiodic(aperiodic6, NULL, 1, APERIODIC_POLICY_KILL);
-    xTaskCreateAperiodic(aperiodic7, NULL, 1, APERIODIC_POLICY_OVERRUN);
-    xTaskCreateAperiodic(aperiodic8, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    // xTaskCreateAperiodic(aperiodic, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    // xTaskCreateAperiodic(aperiodic2, NULL, 1, APERIODIC_POLICY_KILL);
+    // xTaskCreateAperiodic(aperiodic3, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    // xTaskCreateAperiodic(aperiodic4, NULL, 1, APERIODIC_POLICY_KILL);
+    // xTaskCreateAperiodic(aperiodic5, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    // xTaskCreateAperiodic(aperiodic6, NULL, 1, APERIODIC_POLICY_KILL);
+    // xTaskCreateAperiodic(aperiodic7, NULL, 1, APERIODIC_POLICY_OVERRUN);
+    // xTaskCreateAperiodic(aperiodic8, NULL, 1, APERIODIC_POLICY_OVERRUN);
+
+    //xTaskCreateAperiodic(aperiodic, NULL, 1, APERIODIC_POLICY_OVERRUN, 0);
+    //xTaskCreateAperiodic(aperiodic2, NULL, 1, APERIODIC_POLICY_OVERRUN, 400);
     
     
     vConfigureScheduler( &myConfig );

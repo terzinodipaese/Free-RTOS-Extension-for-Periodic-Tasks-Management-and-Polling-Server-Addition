@@ -3851,7 +3851,8 @@ void vConfigureScheduler(SchedulerConfig_t *pxCfg);     //PEOS configuration fun
 BaseType_t xTaskCreateAperiodic(TaskFunction_t pxTaskCode,
                                  void *pvParameters, 
                                  TickType_t xSoftDeadline,
-                                 BaseType_t xPolicy);
+                                 BaseType_t xPolicy,
+                                 TickType_t xArrivalTime);
 
 
 BaseType_t xCreatePollingServer( TickType_t xPeriod, 
