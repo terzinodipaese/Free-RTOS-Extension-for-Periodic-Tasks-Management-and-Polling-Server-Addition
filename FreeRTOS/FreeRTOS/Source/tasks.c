@@ -5246,7 +5246,7 @@ BaseType_t xTaskIncrementTick( void )
 #include <stdio.h> 
 #ifndef DBG_UART
 #define DBG_UART
-//#include "uart.h"  //error?
+#include "uart.h"  //error?
 #endif
 #ifndef traceTASK_OVERRUN
     #define traceTASK_OVERRUN( pxTCB, policy ) \
@@ -5338,7 +5338,7 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                 pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
 
                 /* LOG: Log that the task has been released (made Ready) */
-                vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
+                vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
                 
                 //schedule next release
                 pxConfig->xNextRelease += pxConfig->period;
@@ -5358,7 +5358,7 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                 //traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy); now there's the logger :)
 
                 /* LOG: Log the deadline miss */
-                vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, pxTCB->xDeadline );
+                vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, pxTCB->xDeadline );
 
 
 
@@ -5366,7 +5366,7 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                 {
                 case POLICY_SKIP:
                     /* LOG: Log that the task has been skipped */
-                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
 
                     /* Ignore this release. Update xNextRelease to the future (R_k+2) 
                        so it no longer fires for this period*/
@@ -5375,7 +5375,7 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                     break;
                 case POLICY_CATCH_UP:
                     /* LOG: Log that the task is trying to catch up */
-                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
 
                     /* Run this job as soon as possible, incrementing "penidig job and
                        update xNetRelease to maintain the timeframe"*/
@@ -5385,7 +5385,7 @@ static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
                     break;
                 case POLICY_KILL:
                     /* LOG: Log that the task has been killed */
-                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
                     /*Basic implementation (Log and treat as CATCH_UP or SKIP) */
                     /*
                     pxConfig->ulPendingJobs=0;
@@ -5644,7 +5644,7 @@ static void prvUpdateNextPeriodicEventTick( void )
             /* LOG: Log that a task has started/resumed execution on the CPU */
             if ( pxCurrentTCB != NULL )
             {
-                vLoggerStore( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
+                vLoggerStoreFromISR( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
             }
 
             /* Macro to inject port specific behaviour immediately after

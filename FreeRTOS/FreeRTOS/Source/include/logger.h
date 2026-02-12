@@ -33,6 +33,9 @@ void vLoggerInit(void);
 void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue);
 
 
+void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue);
+
+
 void vLoggerPrint(void);
 
 

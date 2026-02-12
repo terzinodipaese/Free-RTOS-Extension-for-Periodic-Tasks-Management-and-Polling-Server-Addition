@@ -44,6 +44,9 @@ void vLoggerInit(void){
 
 
 void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue){
+    //check if buffer is initialized
+    if (pxHead == NULL) return;
+
     taskENTER_CRITICAL();
     {
         pxHead->pcTaskName = pcTaskName;
@@ -69,6 +72,36 @@ void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, void *pv
     }
     taskEXIT_CRITICAL();
 }
+
+
+void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue)
+{
+    //check if buffer is initialized
+    if (pxHead == NULL) return;
+    
+    UBaseType_t uxSavedInterruptStatus;
+    
+    uxSavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR(); 
+    {
+        pxHead->pcTaskName = pcTaskName;
+        pxHead->eEventType = eEventType;
+        pxHead->ulTimestamp = xTaskGetTickCountFromISR();
+        pxHead->pvValue = pvValue;
+
+        // buffer management
+        pxHead++;
+        if(pxHead >= pxBufferEnd) pxHead = xLoggerBuffer;
+
+        if(usCount < LOGGER_BUFFER_SIZE) {
+            usCount++;
+        } else {
+            pxTail++;
+            if(pxTail >= pxBufferEnd) pxTail = xLoggerBuffer;
+        }
+    }
+    taskEXIT_CRITICAL_FROM_ISR(uxSavedInterruptStatus);
+}
+
 
 static TickType_t lastTick = 0;
 
