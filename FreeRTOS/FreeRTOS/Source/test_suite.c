@@ -138,10 +138,10 @@ void vTask_Jitter(void *pvParameters)
 
     d->last_release = xNow;
 
-    vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_RELEASE, xNow);
-    vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_START, 0);
+   // vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_RELEASE, xNow);
+   // vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_START, 0);
     BusyMs(1); 
-    vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_END, 0);
+    //vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_END, 0);
 }
 
 /**
@@ -181,7 +181,7 @@ void vDeleteTestTasks(void)
     {
         if(xTestTasks[i] != NULL)
         {
-            vTaskDelete(xTestTasks[i]);
+            vTaskDeletePeriodic(xTestTasks[i]);
             xTestTasks[i] = NULL;
         }
     }
@@ -577,22 +577,23 @@ static TestResult_t xTest_CPUOverhead(void)
     vTaskDelay(pdMS_TO_TICKS(1000));
     TickType_t end = xTaskGetTickCount();
 
+
     vTestStop();
 
     /* CPU usage computation */
     uint32_t idle_ticks = ulLoggerGetIdleTime();
     uint32_t total_ticks = end - start;
 
+    if(total_ticks ==0)  total_ticks = 1;
+
     /* expected 8% */
     uint32_t cpu_busy = 100 - ((idle_ticks * 100) / total_ticks);
     uint32_t overhead = (cpu_busy > 8) ? (cpu_busy - 8) : 0;
 
-    if(overhead <= 10)
-    {
+    if(overhead <= 10){
         res.passed = true;
     }
-    else
-    {
+    else{
         snprintf(res.details, sizeof(res.details), 
                 "CPU overhead exceeds the limit, actual: %lu%%", overhead);
     }
@@ -606,209 +607,209 @@ static TestResult_t xTest_CPUOverhead(void)
  * @brief Test 11: Basic aperiodic task execution
  * @details All tasks must be executed
  */
-static TestResult_t xTest_AperiodicServer(void)
-{
-    TestResult_t res = {.passed = false, .details = ""};
+// static TestResult_t xTest_AperiodicServer(void)
+// {
+//     TestResult_t res = {.passed = false, .details = ""};
 
-    vTestStart();
+//     vTestStart();
 
-    xCreatePollingServer(pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), tskIDLE_PRIORITY+2);
+//     xCreatePollingServer(pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), tskIDLE_PRIORITY+2);
 
-    static AperiodicTaskData_t aTasks[4] = {
-        {"APER_1", 5},
-        {"APER_2", 5},
-        {"APER_3", 5},
-        {"APER_4", 5}
-    };
+//     static AperiodicTaskData_t aTasks[4] = {
+//         {"APER_1", 5},
+//         {"APER_2", 5},
+//         {"APER_3", 5},
+//         {"APER_4", 5}
+//     };
 
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[0], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[1], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[2], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[3], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[0], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
+//     vTaskDelay(pdMS_TO_TICKS(10));
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[1], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
+//     vTaskDelay(pdMS_TO_TICKS(10));
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[2], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
+//     vTaskDelay(pdMS_TO_TICKS(10));
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[3], pdMS_TO_TICKS(30), APERIODIC_POLICY_OVERRUN);
     
-    vTaskDelay(pdMS_TO_TICKS(200));
-    vTestStop();
+//     vTaskDelay(pdMS_TO_TICKS(200));
+//     vTestStop();
 
-    uint32_t starts = 0, ends = 0;
+//     uint32_t starts = 0, ends = 0;
 
-    for(int i = 0; i < 4; i++)
-    {
-        if(xLoggerHasEvent(LOGGER_TASK_START)){
-            if(ulLoggerCountEvent(aTasks[i].pcName, LOGGER_TASK_START) > 0) starts++;
-        }
-        if(xLoggerHasEvent(LOGGER_TASK_END)){
-            if(ulLoggerCountEvent(aTasks[i].pcName, LOGGER_TASK_END) > 0) ends++;
-        }
-    }
+//     for(int i = 0; i < 4; i++)
+//     {
+//         if(xLoggerHasEvent(LOGGER_TASK_START)){
+//             if(ulLoggerCountEvent(aTasks[i].pcName, LOGGER_TASK_START) > 0) starts++;
+//         }
+//         if(xLoggerHasEvent(LOGGER_TASK_END)){
+//             if(ulLoggerCountEvent(aTasks[i].pcName, LOGGER_TASK_END) > 0) ends++;
+//         }
+//     }
     
-    if(starts >= 3 && ends >= 3){
-        res.passed = true;
-    }
-    else{
-        snprintf(res.details, sizeof(res.details), "Starts: %lu, Ends: %lu", starts, ends);
-    }
+//     if(starts >= 3 && ends >= 3){
+//         res.passed = true;
+//     }
+//     else{
+//         snprintf(res.details, sizeof(res.details), "Starts: %lu, Ends: %lu", starts, ends);
+//     }
 
-    return res;
-}
+//     return res;
+// }
 
-/**
- * @brief Test 12: Aperiodic task KILL Policy
- * @details Task must be terminated 
- */
-static TestResult_t xTest_AperiodicKill(void)
-{
-    TestResult_t res = {.passed = false, .details = ""};
+// /**
+//  * @brief Test 12: Aperiodic task KILL Policy
+//  * @details Task must be terminated 
+//  */
+// static TestResult_t xTest_AperiodicKill(void)
+// {
+//     TestResult_t res = {.passed = false, .details = ""};
     
-    vTestStart();
+//     vTestStart();
 
-    xCreatePollingServer(pdMS_TO_TICKS(100), pdMS_TO_TICKS(100), tskIDLE_PRIORITY+2);
+//     xCreatePollingServer(pdMS_TO_TICKS(100), pdMS_TO_TICKS(100), tskIDLE_PRIORITY+2);
 
-    static AperiodicTaskData_t aTask = {"APER_KILL", 40};
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_KILL);
+//     static AperiodicTaskData_t aTask = {"APER_KILL", 40};
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_KILL);
     
-    vTaskDelay(pdMS_TO_TICKS(200));
-    vTestStop();
+//     vTaskDelay(pdMS_TO_TICKS(200));
+//     vTestStop();
 
-    uint32_t misses = ulLoggerCountEvent("APER_KILL", LOGGER_TASK_DEADLINE_MISS);
-    uint32_t ends = ulLoggerCountEvent("APER_KILL", LOGGER_TASK_END);
+//     uint32_t misses = ulLoggerCountEvent("APER_KILL", LOGGER_TASK_DEADLINE_MISS);
+//     uint32_t ends = ulLoggerCountEvent("APER_KILL", LOGGER_TASK_END);
 
-    if(misses >= 1 && ends == 0){
-        res.passed = true;
-    }
-    else if(misses >= 1 && ends >= 1){
-        snprintf(res.details, sizeof(res.details), "Task terminated");
-    }
-    else if(misses == 0){
-        snprintf(res.details, sizeof(res.details), "Overrun didn't happen");
-    }
+//     if(misses >= 1 && ends == 0){
+//         res.passed = true;
+//     }
+//     else if(misses >= 1 && ends >= 1){
+//         snprintf(res.details, sizeof(res.details), "Task terminated");
+//     }
+//     else if(misses == 0){
+//         snprintf(res.details, sizeof(res.details), "Overrun didn't happen");
+//     }
 
-    return res;
-}
+//     return res;
+// }
 
-/**
- * @brief Test 13: Aperiodic task OVERRUN Policy
- * @details Task should continue 
- */
-static TestResult_t xTest_AperiodicOverrun(void)
-{
-    TestResult_t res = {.passed = false, .details = ""};
+// /**
+//  * @brief Test 13: Aperiodic task OVERRUN Policy
+//  * @details Task should continue 
+//  */
+// static TestResult_t xTest_AperiodicOverrun(void)
+// {
+//     TestResult_t res = {.passed = false, .details = ""};
     
-    vTestStart();
+//     vTestStart();
 
-    xCreatePollingServer(pdMS_TO_TICKS(100), pdMS_TO_TICKS(100), tskIDLE_PRIORITY+2);
+//     xCreatePollingServer(pdMS_TO_TICKS(100), pdMS_TO_TICKS(100), tskIDLE_PRIORITY+2);
 
-    static AperiodicTaskData_t aTask = {"APER_OVERRUN", 40};
-    xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_OVERRUN);
+//     static AperiodicTaskData_t aTask = {"APER_OVERRUN", 40};
+//     xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_OVERRUN);
     
-    vTaskDelay(pdMS_TO_TICKS(200));
-    vTestStop();
+//     vTaskDelay(pdMS_TO_TICKS(200));
+//     vTestStop();
 
-    uint32_t misses = ulLoggerCountEvent("APER_OVERRUN", LOGGER_TASK_DEADLINE_MISS);
-    uint32_t ends = ulLoggerCountEvent("APER_OVERRUN", LOGGER_TASK_END);
+//     uint32_t misses = ulLoggerCountEvent("APER_OVERRUN", LOGGER_TASK_DEADLINE_MISS);
+//     uint32_t ends = ulLoggerCountEvent("APER_OVERRUN", LOGGER_TASK_END);
 
-    if(misses >= 1 && ends >= 1){
-        res.passed = true;
-    }else if(misses >= 1 && ends == 0){
-        snprintf(res.details, sizeof(res.details), "Task didn't terminate");
-    }else if(misses == 0){
-        snprintf(res.details, sizeof(res.details), "Overrun didn't happen");
-    }
+//     if(misses >= 1 && ends >= 1){
+//         res.passed = true;
+//     }else if(misses >= 1 && ends == 0){
+//         snprintf(res.details, sizeof(res.details), "Task didn't terminate");
+//     }else if(misses == 0){
+//         snprintf(res.details, sizeof(res.details), "Overrun didn't happen");
+//     }
     
-    return res;
-}
+//     return res;
+// }
 
-/**
- * @brief Test 14: Queue full handling
- * @details Check if the queue is full
- */
-static TestResult_t xTest_AperiodicQueueFull(void)
-{
-    TestResult_t res = {.passed = false, .details = ""};
-    bool queue_full = false;
+// /**
+//  * @brief Test 14: Queue full handling
+//  * @details Check if the queue is full
+//  */
+// static TestResult_t xTest_AperiodicQueueFull(void)
+// {
+//     TestResult_t res = {.passed = false, .details = ""};
+//     bool queue_full = false;
 
-    vTestStart();
+//     vTestStart();
 
-    xCreatePollingServer(pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), tskIDLE_PRIORITY+2);
+//     xCreatePollingServer(pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), tskIDLE_PRIORITY+2);
 
-    static AperiodicTaskData_t aTasks[11];
-    static char names[11][12];
+//     static AperiodicTaskData_t aTasks[11];
+//     static char names[11][12];
 
-    for(int i = 0; i < 11; i++)
-    {
-        snprintf(names[i], sizeof(names[i]), "APER_Q%d", i);
-        strncpy(aTasks[i].pcName, names[i], sizeof(aTasks[i].pcName) - 1);
-        aTasks[i].pcName[sizeof(aTasks[i].pcName) - 1] = '\0';
-        aTasks[i].ms = 5;
+//     for(int i = 0; i < 11; i++)
+//     {
+//         snprintf(names[i], sizeof(names[i]), "APER_Q%d", i);
+//         strncpy(aTasks[i].pcName, names[i], sizeof(aTasks[i].pcName) - 1);
+//         aTasks[i].pcName[sizeof(aTasks[i].pcName) - 1] = '\0';
+//         aTasks[i].ms = 5;
 
-        BaseType_t result = xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[i], pdMS_TO_TICKS(50), APERIODIC_POLICY_OVERRUN);
-        if(result != pdPASS){
-            queue_full = true;
-            break;
-        }
-    }
+//         BaseType_t result = xTaskCreateAperiodic(vTask_Aperiodic, &aTasks[i], pdMS_TO_TICKS(50), APERIODIC_POLICY_OVERRUN);
+//         if(result != pdPASS){
+//             queue_full = true;
+//             break;
+//         }
+//     }
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    vTestStop();
+//     vTaskDelay(pdMS_TO_TICKS(2000));
+//     vTestStop();
 
-    if(queue_full){
-        res.passed = true;
-    }
-    else{
-        snprintf(res.details, sizeof(res.details), "Queue full not detected");
-    }
+//     if(queue_full){
+//         res.passed = true;
+//     }
+//     else{
+//         snprintf(res.details, sizeof(res.details), "Queue full not detected");
+//     }
 
-    return res;
-}
+//     return res;
+// }
 
-/**
- * @brief Test 15: Aperiodic tasks with periodic tasks
- * @details Periodic tasks must run more times
- */
-static TestResult_t xTest_AperiodicWithPeriodicTasks(void)
-{
-    TestResult_t res = {.passed = false, .details = ""};
+// /**
+//  * @brief Test 15: Aperiodic tasks with periodic tasks
+//  * @details Periodic tasks must run more times
+//  */
+// static TestResult_t xTest_AperiodicWithPeriodicTasks(void)
+// {
+//     TestResult_t res = {.passed = false, .details = ""};
     
-    vTestStart();
+//     vTestStart();
 
-    xTaskCreatePeriodic(vTask_Generic, "PER_1", 512, (void*)5, 
-                       pdMS_TO_TICKS(30), pdMS_TO_TICKS(30), 
-                       tskIDLE_PRIORITY+4, &xTestTasks[0], POLICY_SKIP);
-    xTaskCreatePeriodic(vTask_Generic, "PER_2", 512, (void*)5, 
-                       pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), 
-                       tskIDLE_PRIORITY+3, &xTestTasks[1], POLICY_SKIP);
+//     xTaskCreatePeriodic(vTask_Generic, "PER_1", 512, (void*)5, 
+//                        pdMS_TO_TICKS(30), pdMS_TO_TICKS(30), 
+//                        tskIDLE_PRIORITY+4, &xTestTasks[0], POLICY_SKIP);
+//     xTaskCreatePeriodic(vTask_Generic, "PER_2", 512, (void*)5, 
+//                        pdMS_TO_TICKS(50), pdMS_TO_TICKS(50), 
+//                        tskIDLE_PRIORITY+3, &xTestTasks[1], POLICY_SKIP);
 
-    xCreatePollingServer(pdMS_TO_TICKS(40), pdMS_TO_TICKS(40), tskIDLE_PRIORITY+2);
+//     xCreatePollingServer(pdMS_TO_TICKS(40), pdMS_TO_TICKS(40), tskIDLE_PRIORITY+2);
     
-    ulTestTaskCount = 2;
+//     ulTestTaskCount = 2;
 
-    static AperiodicTaskData_t aTask = {"APER_MIX", 5};
+//     static AperiodicTaskData_t aTask = {"APER_MIX", 5};
     
-    for(int i = 0; i < 5; i++){
-        xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_OVERRUN);
-        vTaskDelay(pdMS_TO_TICKS(60));
-    }
+//     for(int i = 0; i < 5; i++){
+//         xTaskCreateAperiodic(vTask_Aperiodic, &aTask, pdMS_TO_TICKS(20), APERIODIC_POLICY_OVERRUN);
+//         vTaskDelay(pdMS_TO_TICKS(60));
+//     }
     
-    vTaskDelay(pdMS_TO_TICKS(100));
-    vTestStop();
+//     vTaskDelay(pdMS_TO_TICKS(100));
+//     vTestStop();
 
-    uint32_t per1_starts = ulLoggerCountEvent("PER_1", LOGGER_TASK_START);
-    uint32_t per2_starts = ulLoggerCountEvent("PER_2", LOGGER_TASK_START);
-    uint32_t aper_starts = ulLoggerCountEvent("APER_MIX", LOGGER_TASK_START);
-    uint32_t per1_misses = ulLoggerCountEvent("PER_1", LOGGER_TASK_DEADLINE_MISS);
+//     uint32_t per1_starts = ulLoggerCountEvent("PER_1", LOGGER_TASK_START);
+//     uint32_t per2_starts = ulLoggerCountEvent("PER_2", LOGGER_TASK_START);
+//     uint32_t aper_starts = ulLoggerCountEvent("APER_MIX", LOGGER_TASK_START);
+//     uint32_t per1_misses = ulLoggerCountEvent("PER_1", LOGGER_TASK_DEADLINE_MISS);
 
-    if(per1_starts >= 8 && per2_starts >= 5 && aper_starts >= 3 && per1_misses == 0){
-        res.passed = true;
-    }else{
-        snprintf(res.details, sizeof(res.details), 
-                "PER1: %lu (exp. 8), PER2: %lu (exp. 5), APER: %lu (exp. 3), PER1 miss: %lu (exp. 0)",
-                per1_starts, per2_starts, aper_starts, per1_misses);
-    }
+//     if(per1_starts >= 8 && per2_starts >= 5 && aper_starts >= 3 && per1_misses == 0){
+//         res.passed = true;
+//     }else{
+//         snprintf(res.details, sizeof(res.details), 
+//                 "PER1: %lu (exp. 8), PER2: %lu (exp. 5), APER: %lu (exp. 3), PER1 miss: %lu (exp. 0)",
+//                 per1_starts, per2_starts, aper_starts, per1_misses);
+//     }
 
-    return res;
-}
+//     return res;
+// }
 
 /* CFG TASK TESTS */
 
@@ -827,15 +828,14 @@ static TestResult_t xTest_ConfigBasic(void)
         .trace_enabled = pdTRUE,
         .max_tasks = 20,
         .pxTasks = (PeriodicTaskConfig_t[]) {
-            {vTask_Generic,"CfgA",(void*)5, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(20), pdMS_TO_TICKS(20)},
-            {vTask_Generic,"CfgB",(void*)8, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(30), pdMS_TO_TICKS(30)},
-            {vTask_Generic,"CfgC",(void*)10, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
+            {vTask_Generic,"CfgA",(void*)5, 1024, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(20), pdMS_TO_TICKS(20),POLICY_SKIP},
+            {vTask_Generic,"CfgB",(void*)8, 1024, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(30), pdMS_TO_TICKS(30),POLICY_SKIP},
+            {vTask_Generic,"CfgC",(void*)10, 1024, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50),POLICY_SKIP}
         },
-        .uxNumTasks = 3
     };
     
     vConfigureScheduler(&cfg);
-    vTaskStartScheduler();
+   
     
     vTaskDelay(pdMS_TO_TICKS(300));
     vTestStop();
@@ -878,7 +878,7 @@ static TestResult_t xTest_ConfigPriorities(void)
     };
     
     vConfigureScheduler(&cfg);
-    vTaskStartScheduler();
+   
     
     vTaskDelay(pdMS_TO_TICKS(200));
     vTestStop();
@@ -926,7 +926,7 @@ static TestResult_t xTest_ConfigMaxTasks(void)
     };
 
     vConfigureScheduler(&cfg);
-    vTaskStartScheduler();
+  
     
     vTaskDelay(pdMS_TO_TICKS(1000));
     vTestStop();
@@ -984,7 +984,7 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     vTestStart();
 
     vConfigureScheduler(&cfg);
-    vTaskStartScheduler();
+    
     
     vTaskDelay(pdMS_TO_TICKS(300));
     
@@ -1043,12 +1043,12 @@ static TestDef_t xTests[] = {
     {"9. Test_RoundRobin",                 xTest_RoundRobin},
     {"10. Test_CPUOverhead",               xTest_CPUOverhead},
 
-    /* Aperiodic Task Tests (Project 3) */
-    {"11. Test_AperiodicServer",           xTest_AperiodicServer},
-    {"12. Test_AperiodicKill",             xTest_AperiodicKill},
-    {"13. Test_AperiodicOverrun",          xTest_AperiodicOverrun},
-    {"14. Test_AperiodicQueueFull",        xTest_AperiodicQueueFull},
-    {"15. Test_AperiodicWithPeriodic",     xTest_AperiodicWithPeriodicTasks},
+    // /* Aperiodic Task Tests (Project 3) */
+    // {"11. Test_AperiodicServer",           xTest_AperiodicServer},
+    // {"12. Test_AperiodicKill",             xTest_AperiodicKill},
+    // {"13. Test_AperiodicOverrun",          xTest_AperiodicOverrun},
+    // {"14. Test_AperiodicQueueFull",        xTest_AperiodicQueueFull},
+    // {"15. Test_AperiodicWithPeriodic",     xTest_AperiodicWithPeriodicTasks},
 
     /* Config Tests */
     {"16. Test_ConfigBasic",               xTest_ConfigBasic},

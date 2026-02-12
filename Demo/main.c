@@ -104,6 +104,7 @@ int main(int argc, char **argv){
 #include "task.h"
 #include "uart.h"
 #include "logger.h"
+#include "test_suite.h"
 /* ===========================================================
  * FUNZIONI DI TEST
  * =========================================================== */
@@ -208,6 +209,19 @@ int main( void )
 
 	UART_init();
     vLoggerInit(); // Inizializza il logger prima di avviare lo scheduler
+
+    #ifdef TEST_SUITE
+        UART_printf("\r\n--TEST SUITE--\r\n");
+        SchedulerConfig_t cfg = {
+            .globalPolicy = POLICY_SKIP,
+            .trace_enabled = pdTRUE,
+            .max_tasks = 20,
+            .pxTasks = NULL
+        };
+        vConfigureScheduler(&cfg);
+        xTaskCreate(vTestSuite, "TestSuite",2048,NULL,tskIDLE_PRIORITY+2,NULL);
+        vTaskStartScheduler();
+    #else
 	
     /* 1. Task config */
     PeriodicTaskConfig_t myTasks[] = {
@@ -266,6 +280,7 @@ int main( void )
     vTaskStartScheduler();
 
     /* Loop infinito di sicurezza */
+    #endif
     for( ;; );
     return 0;
 }

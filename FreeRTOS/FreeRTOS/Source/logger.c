@@ -2,20 +2,8 @@
 #include "uart.h"
 #include "FreeRTOS.h"
 #include "task.h"
-<<<<<<< HEAD
-
-
-/* Data */
-static LoggerEntry_t xLoggerBuffer[LOGGER_BUFFER_SIZE];
-
-/* Indexes */
-static uint16_t usCount = 0;
-static TickType_t ulIdleTicks = 0;
-
-/*Ring buffer pointers*/
-=======
 #include <stdio.h>
-
+#include <string.h>
 
 //data
 static LoggerEntry_t xLoggerBuffer[LOGGER_BUFFER_SIZE];
@@ -23,18 +11,15 @@ static LoggerEntry_t xLoggerBuffer[LOGGER_BUFFER_SIZE];
 //indexes usage
 static uint16_t usCount = 0;
 static TickType_t ulIdleTicks = 0;
+static TickType_t ulLastIdleTick = 0;
 
 //pointers 
->>>>>>> dev3_logger
 static LoggerEntry_t *pxHead = NULL;
 static LoggerEntry_t *pxTail = NULL;
 static const LoggerEntry_t *pxBufferEnd = xLoggerBuffer + LOGGER_BUFFER_SIZE;
 
 static TaskHandle_t xLoggerTaskHandle = NULL;
-<<<<<<< HEAD
-=======
 void vLoggerTask(void *pvParameters);
->>>>>>> dev3_logger
 
 
 void vLoggerInit(void){
@@ -59,24 +44,16 @@ void vLoggerInit(void){
 }
 
 
-<<<<<<< HEAD
-void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, TickType_t ulValue){
-=======
 void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue){
     //check if buffer is initialized
     if (pxHead == NULL) return;
 
->>>>>>> dev3_logger
     taskENTER_CRITICAL();
     {
         pxHead->pcTaskName = pcTaskName;
         pxHead->eEventType = eEventType;
         pxHead->ulTimestamp = xTaskGetTickCount();
-<<<<<<< HEAD
-        pxHead->ulValue = ulValue;
-=======
         pxHead->pvValue = pvValue;
->>>>>>> dev3_logger
 
         pxHead++;
         if(pxHead >= pxBufferEnd){
@@ -97,20 +74,6 @@ void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, void *pv
     taskEXIT_CRITICAL();
 }
 
-<<<<<<< HEAD
-static TickType_t lastTick = 0;
-
-void vApplicationIdleHook(void){
-    ulIdleTicks++; 
-}
-
-void LoggerResetIdleTime(void){
-    ulIdleTicks = 0;
-}
-
-uint32_t ulLoggerGetIdleTime(void){
-    return ulIdleTicks;
-=======
 
 void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue)
 {
@@ -141,16 +104,28 @@ void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, v
 }
 
 
-static TickType_t lastTick = 0;
+
 
 void vApplicationIdleHook(void){
-    TickType_t currentTick = xTaskGetTickCount();
-    if(currentTick != lastTick){
-       ulIdleTicks++; 
-       lastTick = currentTick;
+    TickType_t now = xTaskGetTickCountFromISR();
+    if (now != ulLastIdleTick){
+        ulIdleTicks++;
+        ulLastIdleTick = now;
     }
-    
->>>>>>> dev3_logger
+}
+
+void vLoggerResetIdleTime(void){
+    taskENTER_CRITICAL();
+    {
+        ulIdleTicks = 0;
+        ulLastIdleTick = xTaskGetTickCount();
+    }
+    taskEXIT_CRITICAL();
+}
+
+uint32_t ulLoggerGetIdleTime(void)
+{
+    return ulIdleTicks;
 }
 
 
@@ -159,15 +134,6 @@ void vLoggerPrint(void){
     static LoggerEntry_t xLocalBuffer[LOGGER_BUFFER_SIZE];
     uint16_t usLocalCount = 0;
 
-<<<<<<< HEAD
-=======
-    static TickType_t lastTimestamp = 0;
-    static TickType_t lastIdleTicks = 0;
-    
-    TickType_t currentIdleTicks = 0;
-    TickType_t currentTimestamp = 0;
-
->>>>>>> dev3_logger
     //copy of the buffer + critical section
     taskENTER_CRITICAL();
     {
@@ -182,11 +148,6 @@ void vLoggerPrint(void){
         }
 
         usLocalCount = usCount;
-<<<<<<< HEAD
-=======
-        currentIdleTicks = ulIdleTicks;
-        currentTimestamp = xTaskGetTickCount();
->>>>>>> dev3_logger
 
         //reset pointers
         usCount = 0;
@@ -226,17 +187,11 @@ void vLoggerPrint(void){
                 snprintf(s,sizeof(s),
                         "[%6lu] %8s DEADLINE_MISS (D=%lu @ tick %lu)\r\n",
                         (unsigned long) e->ulTimestamp,
-<<<<<<< HEAD
-                        e->pcTaskName,(unsigned long) e->ulValue,
-                        (unsigned long) e->ulTimestamp);
-                break;
-=======
                         e->pcTaskName,(unsigned long) e->pvValue,
                         (unsigned long) e->ulTimestamp);
                 break;
 
                
->>>>>>> dev3_logger
             case LOGGER_TASK_OVERRUN_SKIP:
                 snprintf(s,sizeof(s),
                         "[%6lu] %8s OVERRUN → SKIP\r\n",
@@ -257,8 +212,6 @@ void vLoggerPrint(void){
                         e->pcTaskName);
                 break;
             
-<<<<<<< HEAD
-=======
             //added case for debug messages
             case LOGGER_DEBUG:
                 snprintf(s, sizeof(s),
@@ -267,7 +220,6 @@ void vLoggerPrint(void){
                         e->pcTaskName,
                         (char *)e->pvValue); 
                 break;
->>>>>>> dev3_logger
 
             default:
                 continue;
@@ -276,8 +228,6 @@ void vLoggerPrint(void){
          UART_printf(s); 
     }
 
-<<<<<<< HEAD
-=======
     // Buffer usage info
     if (usLocalCount > 0)
     {
@@ -292,10 +242,6 @@ void vLoggerPrint(void){
         UART_printf(usage_buffer);
     }
 
-    // Update lastTimestamp and lastIdleTicks for next iteration
-    lastTimestamp = currentTimestamp;
-    lastIdleTicks = currentIdleTicks;
->>>>>>> dev3_logger
 }
 
 
@@ -308,7 +254,6 @@ void vLoggerTask(void *pvParameters){
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         vLoggerPrint();
     }
-<<<<<<< HEAD
 }
 
 //for test suite
@@ -322,7 +267,7 @@ BaseType_t xLoggerHasEvent(LoggerEventType_t type){
         LoggerEntry_t *p = pxTail;
         for(uint16_t i = 0; i < usCount; i++){
             if(p->eEventType == type){
-                xFound = true;
+                xFound = pdTRUE;
                 break;
             }
             p++;
@@ -361,7 +306,7 @@ uint32_t ulLoggerCountEvent(const char *taskname, LoggerEventType_t type){
 }
 
 BaseType_t xLoggerDeadlineMiss(LoggerEventType_t type){
-    return LoggerHasEvent(type);
+    return xLoggerHasEvent(type);
 }
 
 TickType_t xLoggerGetFirstEventTime(const char *taskname, LoggerEventType_t type){
@@ -393,6 +338,3 @@ TickType_t xLoggerGetFirstEventTime(const char *taskname, LoggerEventType_t type
 
     return xFirst;  // 0 if not found
 }
-=======
-}
->>>>>>> dev3_logger

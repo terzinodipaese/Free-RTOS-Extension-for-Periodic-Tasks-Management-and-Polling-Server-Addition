@@ -40,11 +40,7 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
-<<<<<<< HEAD
-#include "logger.h"
-=======
 #include "logger.h"  // LOG: logger library added
->>>>>>> dev3_logger
 
 /* The default definitions are only available for non-MPU ports. The
  * reason is that the stack alignment requirements vary for different
@@ -1789,21 +1785,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         TickType_t last = xTaskGetTickCount();
 
         const char *pcName = pcTaskGetName(NULL);
-        TickType_t xDeadline = cfg.deadline;
+        
 
         vLoggerStore(pcName, LOGGER_TASK_RELEASE, 0);
 
         for (;;)
         {
-<<<<<<< HEAD
-            vLoggerStore(pcName, LOGGER_TASK_START, 0);
-
-            cfg.fn(cfg.param);                      /*Call the original function with the original parameters */
-
-            vLoggerStore(pcName, LOGGER_TASK_END, 0);
-
-            vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
-=======
             pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
             // vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
 
@@ -1854,13 +1841,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                     t->xTaskPolicy
                 );
             }
->>>>>>> dev3_logger
         }
     }
 
     /*Extended version of xTaskCreate(), accepts also deadline and priority as TickType_t*/
-<<<<<<< HEAD
-  BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
+   BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
                               const char * const pcName,
                               const configSTACK_DEPTH_TYPE uxStackDepth,
                               void * const pvParameters,
@@ -1874,63 +1859,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
     if (cfg == NULL)
     {
         return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-=======
-    BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
-                                const char * const pcName,
-                                const configSTACK_DEPTH_TYPE uxStackDepth,
-                                void * const pvParameters,
-                                TickType_t xPeriod,
-                                TickType_t xDeadline,
-                                UBaseType_t uxPriority,
-                                TaskHandle_t * const pxCreatedTask,
-                                OverrunPolicy_t xTaskPolicy)
-    {
-        PeriodicWrap_t *cfg = pvPortMalloc(sizeof(*cfg));
-        if (cfg == NULL)
-            return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-
-        /*In the custom data type store all the extra parameters and the data regarding the original function*/
-        cfg->fn     = pxTaskCode;
-        cfg->param  = pvParameters;
-        cfg->period = xPeriod;
-        cfg->deadline = xDeadline;
-
-        cfg->overrunPolicy=xTaskPolicy;    
-        cfg->ulPendingJobs= 0;   //no pending jobs at start
-
-        /* Initialize the list item so it can be inserted into the shadow list */
-        vListInitialiseItem( &( cfg->xPeriodicListItem ) );
-        listSET_LIST_ITEM_OWNER( &( cfg->xPeriodicListItem ), cfg );
-
-        BaseType_t xReturn = xTaskCreate(vPeriodicWrapperTask, pcName, uxStackDepth, cfg, uxPriority, &(cfg->pxTaskHandle));
-
-        // return xTaskCreate(vPeriodicWrapperTask,
-        //                 pcName,
-        //                 uxStackDepth,
-        //                 cfg,           /*Important! in this param also the pointer to the original function and it's param*/
-        //                 uxPriority,
-        //                 pxCreatedTask);
-        if( xReturn == pdPASS )
-        {
-            cfg->xNextRelease = xTaskGetTickCount() + xPeriod;
-            cfg->xNextDeadline = xTaskGetTickCount() + xDeadline;
-            cfg->uxPriority = uxPriority;
-            cfg->uxStackDepth = uxStackDepth;
-
-            taskENTER_CRITICAL();
-            {
-                /* Add to the shadow list for tracking */
-                vListInsertEnd( &pxPeriodicTasksList, &( cfg->xPeriodicListItem ) );
-                xNextPeriodicEventTick = 0; /* Force re-evaluation on next tick */
-            }
-            taskEXIT_CRITICAL();
-        }
-        else 
-        {
-            vPortFree(cfg);
-        }
-        return xReturn;
->>>>>>> dev3_logger
     }
 
     // Inizializza struttura wrapper
@@ -1981,6 +1909,48 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
     return xReturn;
 }
+void vTaskDeletePeriodic(TaskHandle_t xTaskToDelete)
+{
+    PeriodicWrap_t *pxTaskConfig = NULL;
+
+    if(xTaskToDelete == NULL)
+        return;
+
+    taskENTER_CRITICAL();
+    {
+        ListItem_t *pxIterator;
+        const ListItem_t *pxEnd = listGET_END_MARKER(&pxPeriodicTasksList);
+
+        pxIterator = listGET_HEAD_ENTRY(&pxPeriodicTasksList);
+
+        while(pxIterator != pxEnd)
+        {
+            PeriodicWrap_t *cfg = (PeriodicWrap_t *) listGET_LIST_ITEM_OWNER(pxIterator);
+
+            if(cfg->pxTaskHandle == xTaskToDelete)
+            {
+                uxListRemove(&(cfg->xPeriodicListItem));
+                pxTaskConfig = cfg;
+                break;
+            }
+
+            pxIterator = listGET_NEXT(pxIterator);
+        }
+    }
+    taskEXIT_CRITICAL();
+
+    if(pxTaskConfig != NULL)
+    {
+        vTaskDelete(xTaskToDelete);
+        vPortFree(pxTaskConfig);
+    }
+    else
+    {
+        vTaskDelete(xTaskToDelete);
+    }
+}
+
+
 
 
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
