@@ -5004,18 +5004,7 @@ BaseType_t xTaskIncrementTick( void )
          * delayed lists if it wraps to 0. */
         xTickCount = xConstTickCount;
 
-        /** Periodic task handling */
-        // TO-DO: add to config file
-        //PEOS wake up suspended task
-
-        #if( configUSE_PERIODIC_SCHEDULER == 1)
-            /* Pass the new current time to the handler function */
-            if( xConstTickCount >= xNextPeriodicEventTick)
-            {
-                // Iterate over periodic tasks
-                xSwitchRequired = prvProcessPeriodicTasks( xConstTickCount );
-            }
-        #endif
+        
 
 
 
@@ -5222,6 +5211,20 @@ BaseType_t xTaskIncrementTick( void )
             #endif /* #if ( configNUMBER_OF_CORES == 1 ) */
         }
         #endif /* #if ( configUSE_PREEMPTION == 1 ) */
+        /** Periodic task handling */
+        // TO-DO: add to config file
+        //PEOS wake up suspended task
+
+        #if( configUSE_PERIODIC_SCHEDULER == 1)
+            /* Pass the new current time to the handler function */
+            if( xConstTickCount >= xNextPeriodicEventTick)
+            {
+                // Iterate over periodic tasks, without overriding the kernel's decision
+                if( prvProcessPeriodicTasks( xConstTickCount ) == pdTRUE ){
+                    xSwitchRequired = pdTRUE;
+                }
+            }
+        #endif
     }
     else
     {
