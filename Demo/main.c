@@ -147,10 +147,10 @@ void vTaskAperiodicSpawner( void *pvParameters )
 
     /* 2. Spawn the Aperiodic Task */
     /* Parameters: Function, Args, SoftDeadline, Policy, StartTime (Now) */
-    xTaskCreateAperiodic( vAperiodicJobCallback, 
+    xTaskCreateAperiodic( vAperiodicLongJob, 
                           NULL, 
                           10, /* Short deadline */ 
-                          APERIODIC_POLICY_OVERRUN, 
+                          APERIODIC_POLICY_KILL, 
                           xTaskGetTickCount() );
 
     UART_printf( "Spawner task: Request sent to Polling Server.\n" );
@@ -205,7 +205,7 @@ int main( void )
             .uxPriority     = 1,
             .xPeriod        = 100,      
             .xDeadline      = 100,
-            .xTaskPolicy    = POLICY_CATCH_UP 
+            .xTaskPolicy    = POLICY_SKIP 
         }
     };
 
