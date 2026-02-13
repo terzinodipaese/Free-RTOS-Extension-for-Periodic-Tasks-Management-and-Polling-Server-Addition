@@ -489,8 +489,10 @@ PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /**< Po
 PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /**< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
 PRIVILEGED_DATA static List_t xPendingReadyList;                         /**< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
-PRIVILEGED_DATA static List_t pxPeriodicTasksList;                       /**< List of all periodic tasks */
-PRIVILEGED_DATA static TickType_t xNextPeriodicEventTick = portMAX_DELAY;/**< Tracking the next time the periodic scheduler needs to do something */
+#if ( configUSE_PERIODIC_SCHEDULER == 1 )
+    PRIVILEGED_DATA static List_t pxPeriodicTasksList;                       /**< List of all periodic tasks */
+    PRIVILEGED_DATA static TickType_t xNextPeriodicEventTick = portMAX_DELAY;/**< Tracking the next time the periodic scheduler needs to do something */
+#endif
 
 #if ( INCLUDE_vTaskDelete == 1 )
 
@@ -555,9 +557,10 @@ PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime[ conf
 
 /* File private functions. --------------------------------*/
 
-static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount ) PRIVILEGED_FUNCTION;
-static void prvUpdateNextPeriodicEventTick( void ) PRIVILEGED_FUNCTION;
-
+#if ( configUSE_PERIODIC_SCHEDULER == 1)
+    static BaseType_t prvProcessPeriodicTasks( const TickType_t xCurrentTickCount ) PRIVILEGED_FUNCTION;
+    static void prvUpdateNextPeriodicEventTick( void ) PRIVILEGED_FUNCTION;
+#endif
 /*
  * Creates the idle tasks during scheduler start.
  */
@@ -1752,6 +1755,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         return pxNewTCB;
     }
 /*-----------------------------------------------------------*/
+#if ( configUSE_PERIODIC_SCHEDULER == 1 )
     /*PEOS EOS project*/
     /*Custom data type to transform a one-shot function into a infinite task */
     /*If the one-shot contains vTaskDelete() the task will be executed just one time */
@@ -1774,13 +1778,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
     } PeriodicWrap_t;
 
     //PEOS global var to default config
-    static OverrunPolicy_t xGlobalOverrunPolicy= POLICY_SKIP; 
+    static OverrunPolicy_t xGlobalOverrunPolicy = POLICY_SKIP; 
 
     static void vPeriodicWrapperTask(void *pvParameters)
     {
         PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
-        // vPortFree(pvParameters);                 // free small helper struct // we actually need this
-
+        //  vPortFree(pvParameters);                 // free small helper struct // we actually need this // TODO: remove if not needed
 
         TickType_t last = xTaskGetTickCount();
 
@@ -1893,6 +1896,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         }
         return xReturn;
     }
+#endif /* configUSE_PERIODIC_SCHEDULER */
 
 
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
@@ -2263,6 +2267,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
         mtCOVERAGE_TEST_MARKER();
     }
 
+#if ( configUSE_PERIODIC_SCHEDULER == 1 )
     if( ( TaskFunction_t ) pxTaskCode == ( TaskFunction_t ) vPeriodicWrapperTask )
     {
         PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
@@ -2279,6 +2284,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     {
         pxNewTCB->xIsPeriodic = pdFALSE;
     }
+#endif /* configUSE_PERIODIC_SCHEDULER */
 }
 /*-----------------------------------------------------------*/
 
@@ -5002,17 +5008,16 @@ BaseType_t xTaskIncrementTick( void )
         // TO-DO: add to config file
         //PEOS wake up suspended task
 
-        #if( defined(configUSE_PERIODIC_SCHEDULER) && (configUSE_PERIODIC_SCHEDULER == 1))
-            /* Pass the new current time to your handler function */
-            prvProcessPeriodicTasks(xConstTickCount);
+        #if( configUSE_PERIODIC_SCHEDULER == 1)
+            /* Pass the new current time to the handler function */
+            if( xConstTickCount >= xNextPeriodicEventTick)
+            {
+                // Iterate over periodic tasks
+                xSwitchRequired = prvProcessPeriodicTasks( xConstTickCount );
+            }
         #endif
 
 
-        if( xConstTickCount >= xNextPeriodicEventTick)
-        {
-            // Iterate over periodic tasks
-            xSwitchRequired = prvProcessPeriodicTasks( xConstTickCount );
-        }
 
         if( xConstTickCount == ( TickType_t ) 0U )
         {
@@ -5287,421 +5292,423 @@ BaseType_t xTaskIncrementTick( void )
 #define traceDEADLINE_MISS( ulTaskID ) \
     printf( "[%u] DEADLINE MISS (OVERRUN): Task %u allowed to finish.\n", \
             xTaskGetTickCount(), (unsigned int)ulTaskID )
+            
+#if( configUSE_PERIODIC_SCHEDULER == 1)
 
+    typedef struct {
+        /* FreeRTOS List Item for sorting by Release Time */
+        ListItem_t xListItem; 
 
-typedef struct {
-    /* FreeRTOS List Item for sorting by Release Time */
-    ListItem_t xListItem; 
+        /* Job Details */
+        TaskFunction_t fn;
+        void *param;
+        TickType_t xRelativeDeadline; /* Deadline relative to Activation (Start of execution) */
+        AperiodicPolicy_t xPolicy;
+        uint32_t ulTaskID;        
+        
+        TickType_t xReleaseTime;      /* The "Start Time" defined by user */
+    } AperiodicJob_t;
 
-    /* Job Details */
-    TaskFunction_t fn;
-    void *param;
-    TickType_t xRelativeDeadline; /* Deadline relative to Activation (Start of execution) */
-    AperiodicPolicy_t xPolicy;
-    uint32_t ulTaskID;        
-    
-    TickType_t xReleaseTime;      /* The "Start Time" defined by user */
-} AperiodicJob_t;
+    static List_t xAperiodicJobWaitList;
+    static BaseType_t xListInitialized = pdFALSE;
 
-static List_t xAperiodicJobWaitList;
-static BaseType_t xListInitialized = pdFALSE;
+    /* Globals to let the Kernel monitor the Server's internal state */
+    static TaskHandle_t xPollingServerHandle = NULL; /* To identify the server */
+    static volatile BaseType_t xAperiodicJobRunning = pdFALSE;
+    static volatile TickType_t xAperiodicJobAbsDeadline = 0;
+    static volatile AperiodicPolicy_t xAperiodicJobPolicy = APERIODIC_POLICY_OVERRUN;
+    static volatile uint32_t ulCurrentAperiodicID = 0;
 
-/* Globals to let the Kernel monitor the Server's internal state */
-static TaskHandle_t xPollingServerHandle = NULL; /* To identify the server */
-static volatile BaseType_t xAperiodicJobRunning = pdFALSE;
-static volatile TickType_t xAperiodicJobAbsDeadline = 0;
-static volatile AperiodicPolicy_t xAperiodicJobPolicy = APERIODIC_POLICY_OVERRUN;
-static volatile uint32_t ulCurrentAperiodicID = 0;
-
-/*
-static void vAperiodicWrapperTask(void *pvParameters)
-{
-	if (pvParameters == NULL) {
+    /*
+    static void vAperiodicWrapperTask(void *pvParameters)
+    {
+        if (pvParameters == NULL) {
+            taskENTER_CRITICAL();
+            vTaskDelete(NULL);
+            taskEXIT_CRITICAL();
+            return;
+        }
+        
+        AperiodicJob_t * cfg = (AperiodicJob_t * ) pvParameters;
+        
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        
+        if (cfg->fn != NULL)
+            cfg->fn(cfg->param);
+        
         taskENTER_CRITICAL();
-		vTaskDelete(NULL);
-		taskEXIT_CRITICAL();
-        return;
-    }
-    
-	AperiodicJob_t * cfg = (AperiodicJob_t * ) pvParameters;
-	
-	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-	
-	if (cfg->fn != NULL)
-		cfg->fn(cfg->param);
-	
-	taskENTER_CRITICAL();
-	vTaskDelete(NULL);
-	taskEXIT_CRITICAL();
-}*/
+        vTaskDelete(NULL);
+        taskEXIT_CRITICAL();
+    }*/
 
 
-typedef struct {
-    TaskFunction_t fn;
-    void *param;
-    TaskHandle_t xServerHandle; /* Handle to notify the Server when done */
-} WorkerArgs_t;
+    typedef struct {
+        TaskFunction_t fn;
+        void *param;
+        TaskHandle_t xServerHandle; /* Handle to notify the Server when done */
+    } WorkerArgs_t;
 
-static void vAperiodicWorker( void *pvParameters )
-{
-    WorkerArgs_t *pxArgs = (WorkerArgs_t *) pvParameters;
-
-    /* 1. Execute the User Function */
-    pxArgs->fn( pxArgs->param );
-
-    /* 2. Notify Server that we are done */
-    /* We send a notification value of 1 to indicate success */
-    xTaskNotify( pxArgs->xServerHandle, 1, eSetValueWithOverwrite );
-
-    /* 3. Delete self (The server might have already deleted us if we timed out, 
-       but this is safe in FreeRTOS) */
-    vTaskDelete( NULL );
-}
-
-BaseType_t xTaskCreateAperiodic(TaskFunction_t pxTaskCode,
-                                 void *pvParameters, 
-                                 TickType_t xSoftDeadline,
-                                 BaseType_t xPolicy,
-                                 TickType_t xStartReleaseTime)
-{
-    /* Initialize List on first call */
-    portENTER_CRITICAL();
-    if( xListInitialized == pdFALSE )
+    static void vAperiodicWorker( void *pvParameters )
     {
-        vListInitialise( &xAperiodicJobWaitList );
-        xListInitialized = pdTRUE;
-    }
-    portEXIT_CRITICAL();
+        WorkerArgs_t *pxArgs = (WorkerArgs_t *) pvParameters;
 
-    /* 1. Allocate Job Memory */
-    AperiodicJob_t *pxNewJob = (AperiodicJob_t *) pvPortMalloc( sizeof(AperiodicJob_t) );
-    if( pxNewJob == NULL ) return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+        /* 1. Execute the User Function */
+        pxArgs->fn( pxArgs->param );
 
-    /* 2. Populate Job Data */
-    static uint32_t ulNextID = 1;
-    pxNewJob->fn = pxTaskCode;
-    pxNewJob->param = pvParameters;
-    pxNewJob->xRelativeDeadline = xSoftDeadline;
-    pxNewJob->xPolicy = (AperiodicPolicy_t) xPolicy;
-    pxNewJob->ulTaskID = ulNextID++;
-    pxNewJob->xReleaseTime = xStartReleaseTime;
+        /* 2. Notify Server that we are done */
+        /* We send a notification value of 1 to indicate success */
+        xTaskNotify( pxArgs->xServerHandle, 1, eSetValueWithOverwrite );
 
-    /* 3. Prepare List Item for Sorting */
-    vListInitialiseItem( &pxNewJob->xListItem );
-    
-    /* KEY: We set the Item Value to ReleaseTime. 
-       FreeRTOS uses this value to sort the list ascendingly. */
-    listSET_LIST_ITEM_VALUE( &pxNewJob->xListItem, xStartReleaseTime );
-    listSET_LIST_ITEM_OWNER( &pxNewJob->xListItem, pxNewJob );
-
-    /* 4. Insert into Sorted List */
-    portENTER_CRITICAL();
-    vListInsert( &xAperiodicJobWaitList, &pxNewJob->xListItem );
-    portEXIT_CRITICAL();
-
-    return pdPASS;
-}
-
-/* ------------------------------------------------ */
-/* Polling Server Logic                             */
-/* ------------------------------------------------ */
-static void vPollingServerFunction( void *pvParameters )
-{
-    (void) pvParameters;
-    
-    /* Ensure list is init (in case no tasks were created yet) */
-    if( xListInitialized == pdFALSE )
-    {
-        vListInitialise( &xAperiodicJobWaitList );
-        xListInitialized = pdTRUE;
+        /* 3. Delete self (The server might have already deleted us if we timed out, 
+        but this is safe in FreeRTOS) */
+        vTaskDelete( NULL );
     }
 
-    for( ;; )
+    BaseType_t xTaskCreateAperiodic(TaskFunction_t pxTaskCode,
+                                    void *pvParameters, 
+                                    TickType_t xSoftDeadline,
+                                    BaseType_t xPolicy,
+                                    TickType_t xStartReleaseTime)
     {
-        /* 1. Loop through jobs */
-        while( 1 )
+        /* Initialize List on first call */
+        portENTER_CRITICAL();
+        if( xListInitialized == pdFALSE )
         {
-            TickType_t xNow = xTaskGetTickCount();
-            AperiodicJob_t *pxJob = NULL;
+            vListInitialise( &xAperiodicJobWaitList );
+            xListInitialized = pdTRUE;
+        }
+        portEXIT_CRITICAL();
 
-            /* --- CRITICAL: Peek at List --- */
-            portENTER_CRITICAL();
+        /* 1. Allocate Job Memory */
+        AperiodicJob_t *pxNewJob = (AperiodicJob_t *) pvPortMalloc( sizeof(AperiodicJob_t) );
+        if( pxNewJob == NULL ) return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+
+        /* 2. Populate Job Data */
+        static uint32_t ulNextID = 1;
+        pxNewJob->fn = pxTaskCode;
+        pxNewJob->param = pvParameters;
+        pxNewJob->xRelativeDeadline = xSoftDeadline;
+        pxNewJob->xPolicy = (AperiodicPolicy_t) xPolicy;
+        pxNewJob->ulTaskID = ulNextID++;
+        pxNewJob->xReleaseTime = xStartReleaseTime;
+
+        /* 3. Prepare List Item for Sorting */
+        vListInitialiseItem( &pxNewJob->xListItem );
+        
+        /* KEY: We set the Item Value to ReleaseTime. 
+        FreeRTOS uses this value to sort the list ascendingly. */
+        listSET_LIST_ITEM_VALUE( &pxNewJob->xListItem, xStartReleaseTime );
+        listSET_LIST_ITEM_OWNER( &pxNewJob->xListItem, pxNewJob );
+
+        /* 4. Insert into Sorted List */
+        portENTER_CRITICAL();
+        vListInsert( &xAperiodicJobWaitList, &pxNewJob->xListItem );
+        portEXIT_CRITICAL();
+
+        return pdPASS;
+    }
+
+    /* ------------------------------------------------ */
+    /* Polling Server Logic                             */
+    /* ------------------------------------------------ */
+    static void vPollingServerFunction( void *pvParameters )
+    {
+        (void) pvParameters;
+        
+        /* Ensure list is init (in case no tasks were created yet) */
+        if( xListInitialized == pdFALSE )
+        {
+            vListInitialise( &xAperiodicJobWaitList );
+            xListInitialized = pdTRUE;
+        }
+
+        for( ;; )
+        {
+            /* 1. Loop through jobs */
+            while( 1 )
             {
-                if( listLIST_IS_EMPTY( &xAperiodicJobWaitList ) )
+                TickType_t xNow = xTaskGetTickCount();
+                AperiodicJob_t *pxJob = NULL;
+
+                /* --- CRITICAL: Peek at List --- */
+                portENTER_CRITICAL();
                 {
-                    portEXIT_CRITICAL();
-                    break; /* List Empty, suspend server */
+                    if( listLIST_IS_EMPTY( &xAperiodicJobWaitList ) )
+                    {
+                        portEXIT_CRITICAL();
+                        break; /* List Empty, suspend server */
+                    }
+
+                    /* Peek Head (Earliest Start Time) */
+                    ListItem_t *pxHeadItem = listGET_HEAD_ENTRY( &xAperiodicJobWaitList );
+                    TickType_t xNextReleaseTime = listGET_LIST_ITEM_VALUE( pxHeadItem );
+
+                    if( xNow < xNextReleaseTime )
+                    {
+                        /* Job is in the future. Stop processing. */
+                        portEXIT_CRITICAL();
+                        break; 
+                    }
+
+                    /* Job is ready! Remove it. */
+                    uxListRemove( pxHeadItem );
+                    pxJob = (AperiodicJob_t *) listGET_LIST_ITEM_OWNER( pxHeadItem );
                 }
+                portEXIT_CRITICAL();
+                /* ------------------------------ */
 
-                /* Peek Head (Earliest Start Time) */
-                ListItem_t *pxHeadItem = listGET_HEAD_ENTRY( &xAperiodicJobWaitList );
-                TickType_t xNextReleaseTime = listGET_LIST_ITEM_VALUE( pxHeadItem );
-
-                if( xNow < xNextReleaseTime )
+                if( pxJob != NULL )
                 {
-                    /* Job is in the future. Stop processing. */
-                    portEXIT_CRITICAL();
-                    break; 
-                }
+                    /* 2. Prepare Worker Args */
+                    WorkerArgs_t xWorkerArgs;
+                    xWorkerArgs.fn = pxJob->fn;
+                    xWorkerArgs.param = pxJob->param;
+                    xWorkerArgs.xServerHandle = xTaskGetCurrentTaskHandle();
 
-                /* Job is ready! Remove it. */
-                uxListRemove( pxHeadItem );
-                pxJob = (AperiodicJob_t *) listGET_LIST_ITEM_OWNER( pxHeadItem );
+                    /* 3. Spawn Worker Task */
+                    /* Note: Priority should be high enough to run immediately, 
+                    or equal to Server priority */
+                    TaskHandle_t xWorkerHandle = NULL;
+                    xTaskCreate( vAperiodicWorker, "AperWorker", 1024, &xWorkerArgs, 
+                                uxTaskPriorityGet(NULL), &xWorkerHandle );
+
+                    /* 4. Wait for Completion OR Deadline (Activation Time starts NOW) */
+                    /* clear notification first */
+                    ulTaskNotifyTake( pdTRUE, 0 ); 
+                    
+                    /* Wait exactly for the deadline duration */
+                    uint32_t ulResult = ulTaskNotifyTake( pdTRUE, pxJob->xRelativeDeadline );
+
+                    if( ulResult > 0 )
+                    {
+                        /* SUCCESS: Task finished before deadline */
+                        /* Nothing to do, Worker deletes itself */
+                    }
+                    else
+                    {
+                        /* FAILURE: Timeout / Deadline Miss */
+                        if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
+                        {
+                            /* CONSTRAINT: Immediately terminate task */
+                            traceDEADLINE_KILL( pxJob->ulTaskID);
+                            vTaskDelete( xWorkerHandle );
+                        }
+                        else // OVERRUN
+                        {
+                            /* CONSTRAINT: Allow execution to continue */
+                            traceDEADLINE_MISS( pxJob->ulTaskID );
+                            
+                            /* We must wait for it to finish now, effectively ignoring deadline */
+                            ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+                        }
+                    }
+
+                    /* Free the job struct memory */
+                    vPortFree( pxJob );
+                }
             }
-            portEXIT_CRITICAL();
-            /* ------------------------------ */
 
-            if( pxJob != NULL )
+            /* 5. Suspend until next Period */
+            /* In a real periodic server, you would use vTaskDelayUntil here. 
+            Since you use vTaskSuspend(NULL) in your snippet, I keep it. */
+            vTaskSuspend( NULL );
+        }
+    }
+
+    BaseType_t xCreatePollingServer( TickType_t xPeriod, 
+                                    TickType_t xDeadline, 
+                                    UBaseType_t uxPriority )
+    {
+        /* Create it as a Periodic Task with SKIP policy (Server shouldn't catch up) */
+        /* We pass the internal vPollingServerFunction as the code */
+        
+        BaseType_t xReturn = xTaskCreatePeriodic( 
+                                vPollingServerFunction, 
+                                "PollServer", 
+                                4096,   /* Large stack for safety */
+                                NULL, 
+                                xPeriod, 
+                                xDeadline, 
+                                uxPriority, 
+                                &xPollingServerHandle, /* Capture handle for kernel monitor */
+                                POLICY_SKIP
+                            );
+
+        return xReturn;
+    }
+
+
+
+    /*------------------------------------*/
+
+    //PEOS HARD KILL */
+    static void prvHardResetTask( TCB_t *pxTCB, PeriodicWrap_t *pxConfig )
+    {
+        // Remove task from list
+        if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+        {
+            taskRESET_READY_PRIORITY( pxTCB->uxPriority );
+        }
+        
+        // If it's waiting for events, let's remove it from there too
+        if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+        {
+            ( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+        }
+
+        // STACK RESET 
+        // Calculate the pointer to the end of the allocated stack
+        StackType_t *pxTopOfStack = pxTCB->pxStack + ( pxConfig->uxStackDepth - ( uint32_t ) 1 );
+        
+        // Memory alignment
+        pxTopOfStack = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
+
+        // Call the PORT function to write the initial registers back to the stack.
+        // IMPORTANT: pxTaskCode must be the WRAPPER (vPeriodicWrapperTask),
+        // pvParameters must be the configuration structure.
+
+        // This configuration is ok even if it is sign wrong by VSCODE
+        pxTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, vPeriodicWrapperTask, ( void * ) pxConfig);
+    
+        // Reset internal counters
+        pxConfig->ulPendingJobs = 0; 
+        
+        // Put the task in the SUSPENDED list
+        // Wake up only when prvProcessPeriodicTasks decides to release in the next period.
+        vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
+    }
+
+    static BaseType_t prvProcessPeriodicTasks( const TickType_t xCurrentTickCount )
+    {
+        ListItem_t * pxIterator;
+        /* Cast to remove const qualifier warning */
+        ListItem_t * const pxListEnd = ( ListItem_t * ) listGET_END_MARKER( &pxPeriodicTasksList );
+        PeriodicWrap_t * pxConfig;
+        BaseType_t xYieldRequired = pdFALSE;
+        TCB_t * pxTCB;
+
+        for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+            pxIterator != pxListEnd; 
+            pxIterator = listGET_NEXT( pxIterator ) )
+        {
+            pxConfig = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+            
+            if(pxConfig->pxTaskHandle==NULL) continue;
+
+            pxTCB = ( TCB_t * ) pxConfig->pxTaskHandle;
+
+            /* Check for RELEASE TIME (R_k) */
+            if( xCurrentTickCount >= pxConfig->xNextRelease )
             {
-                /* 2. Prepare Worker Args */
-                WorkerArgs_t xWorkerArgs;
-                xWorkerArgs.fn = pxJob->fn;
-                xWorkerArgs.param = pxJob->param;
-                xWorkerArgs.xServerHandle = xTaskGetCurrentTaskHandle();
-
-                /* 3. Spawn Worker Task */
-                /* Note: Priority should be high enough to run immediately, 
-                   or equal to Server priority */
-                TaskHandle_t xWorkerHandle = NULL;
-                xTaskCreate( vAperiodicWorker, "AperWorker", 1024, &xWorkerArgs, 
-                             uxTaskPriorityGet(NULL), &xWorkerHandle );
-
-                /* 4. Wait for Completion OR Deadline (Activation Time starts NOW) */
-                /* clear notification first */
-                ulTaskNotifyTake( pdTRUE, 0 ); 
-                
-                /* Wait exactly for the deadline duration */
-                uint32_t ulResult = ulTaskNotifyTake( pdTRUE, pxJob->xRelativeDeadline );
-
-                if( ulResult > 0 )
+                /* INTERNAL CHECK: Is the task in the suspended list? */
+                if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
                 {
-                    /* SUCCESS: Task finished before deadline */
-                    /* Nothing to do, Worker deletes itself */
+                    // IMPORTANT: HARD KILL 
+                    // If the policy is KILL, we reset the stack NOW, before starting it.
+                    // This corrects the value of pxTopOfStack that was contaminated
+                    // by the last context switch.
+                    if( pxConfig->overrunPolicy == POLICY_KILL )
+                    {
+                        prvHardResetTask( pxTCB, pxConfig );
+                    }
+                    /* SUCCESS: Resume directly without calling vTaskResume API */
+                    ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+                    prvAddTaskToReadyList( pxTCB );
+
+                    // Update absolute deadline for this new job
+                    pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
+                    
+                    // schedule next release
+                    pxConfig->xNextRelease += pxConfig->period;
+
+                    /* If the released task has higher priority, we must yield later */
+                    if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
+                    {
+                        xYieldRequired = pdTRUE;
+                    }
                 }
                 else
                 {
-                    /* FAILURE: Timeout / Deadline Miss */
-                    if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
+                    /* OVERRUN: Task did not suspend itself in time */
+
+                    // TODO: Add the Trace call here to log the error (DEADLINE MISS / OVERRUN)
+                    // something like 
+                    traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy);
+
+                    switch (pxConfig->overrunPolicy)
                     {
-                        /* CONSTRAINT: Immediately terminate task */
-                        traceDEADLINE_KILL( pxJob->ulTaskID);
-                        vTaskDelete( xWorkerHandle );
-                    }
-                    else // OVERRUN
-                    {
-                        /* CONSTRAINT: Allow execution to continue */
-                        traceDEADLINE_MISS( pxJob->ulTaskID );
+                    case POLICY_SKIP:
+                        /* Ignore this release. Update xNextRelease to the future (R_k+2) 
+                        so it no longer fires for this period*/
+                        pxConfig->xNextRelease+=pxConfig->period;
+
+                        break;
+                    case POLICY_CATCH_UP:
+                        /* Run this job as soon as possible, incrementing "penidig job and
+                        update xNetRelease to maintain the timeframe"*/
+                        pxConfig->xNextRelease+=pxConfig->period;
+                        pxConfig->ulPendingJobs++;
                         
-                        /* We must wait for it to finish now, effectively ignoring deadline */
-                        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+                        break;
+                    case POLICY_KILL:
+                        /* Basic implementation (Log and treat as CATCH_UP or SKIP) */
+                        /*
+                        pxConfig->ulPendingJobs=0;
+                        pxConfig->xNextRelease+=pxConfig->period;
+                        */
+                        /*------HARD VERSION-------- */
+
+                        //Reset task (Stack Rewind)
+                        prvHardResetTask(pxTCB,pxConfig);
+                        
+                        // Schedule the next release (skip the current one)
+                        
+                        //Restart at the next period:
+                        pxConfig->xNextRelease+=pxConfig->period;
+
+                        //If the killed task was the running one, we need to force a context switch
+                        if( pxTCB == pxCurrentTCB )
+                        {
+                            xYieldRequired=pdTRUE;    
+                        }
+                        /*---------------------------*/
+                        break;
+                    default:
+                        break;
                     }
                 }
-
-                /* Free the job struct memory */
-                vPortFree( pxJob );
             }
         }
 
-        /* 5. Suspend until next Period */
-        /* In a real periodic server, you would use vTaskDelayUntil here. 
-           Since you use vTaskSuspend(NULL) in your snippet, I keep it. */
-        vTaskSuspend( NULL );
-    }
-}
+        /* Optimization: Update the global next event time */
+        prvUpdateNextPeriodicEventTick();
 
-BaseType_t xCreatePollingServer( TickType_t xPeriod, 
-                                 TickType_t xDeadline, 
-                                 UBaseType_t uxPriority )
-{
-    /* Create it as a Periodic Task with SKIP policy (Server shouldn't catch up) */
-    /* We pass the internal vPollingServerFunction as the code */
-    
-    BaseType_t xReturn = xTaskCreatePeriodic( 
-                            vPollingServerFunction, 
-                            "PollServer", 
-                            4096,   /* Large stack for safety */
-                            NULL, 
-                            xPeriod, 
-                            xDeadline, 
-                            uxPriority, 
-                            &xPollingServerHandle, /* Capture handle for kernel monitor */
-                            POLICY_SKIP
-                         );
-
-    return xReturn;
-}
-
-
-
-/*------------------------------------*/
-
-//PEOS HARD KILL */
-static void prvHardResetTask( TCB_t *pxTCB, PeriodicWrap_t *pxConfig )
-{
-    //Remove task from list
-    if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
-    {
-        taskRESET_READY_PRIORITY( pxTCB->uxPriority );
-    }
-    
-    //If it's waiting for events, let's remove it from there too
-    if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
-    {
-        ( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+        return xYieldRequired;
     }
 
-    // STACK RESET 
-    //Calculate the pointer to the end of the allocated stack
-    StackType_t *pxTopOfStack = pxTCB->pxStack + ( pxConfig->uxStackDepth - ( uint32_t ) 1 );
-    
-    //Memory alignment
-    pxTopOfStack = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
+    /*-----------------------------------------------------------*/
 
-    //Call the PORT function to write the initial registers back to the stack.
-    //IMPORTANT: pxTaskCode must be the WRAPPER (vPeriodicWrapperTask),
-    //pvParameters must be the configuration structure.
-
-    //This configuration is ok even if it is sign wrong by VSCODE
-    pxTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, vPeriodicWrapperTask, ( void * ) pxConfig);
-   
-    // Reset internal counters
-    pxConfig->ulPendingJobs = 0; 
-    
-    // Put the task in the SUSPENDED list
-    // Wake up only when prvProcessPeriodicTasks decides to release in the next period.
-    vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
-}
-
-static BaseType_t prvProcessPeriodicTasks( const TickType_t xTickCount )
-{
-    ListItem_t * pxIterator;
-    /* Cast to remove const qualifier warning */
-    ListItem_t * const pxListEnd = ( ListItem_t * ) listGET_END_MARKER( &pxPeriodicTasksList );
-    PeriodicWrap_t * pxConfig;
-    BaseType_t xYieldRequired = pdFALSE;
-    TCB_t * pxTCB;
-
-    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
-         pxIterator != pxListEnd; 
-         pxIterator = listGET_NEXT( pxIterator ) )
+    static void prvUpdateNextPeriodicEventTick( void )
     {
-        pxConfig = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
-        
-        if(pxConfig->pxTaskHandle==NULL) continue;
+        ListItem_t * pxIterator;
+        ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
+        TickType_t xMinTick = portMAX_DELAY;
 
-        pxTCB = ( TCB_t * ) pxConfig->pxTaskHandle;
-
-        /* 2. Check for RELEASE TIME (R_k) */
-        if( xTickCount >= pxConfig->xNextRelease )
+        for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
+            pxIterator != pxListEnd; 
+            pxIterator = listGET_NEXT( pxIterator ) )
         {
-            /* INTERNAL CHECK: Is the task in the suspended list? */
-            if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
+            PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
+
+            /* Find the soonest release time in the entire shadow list */
+            if( pxCfg->xNextRelease < xMinTick )
             {
-                //IMPORTANT: HARD KILL 
-                //If the policy is KILL, we reset the stack NOW, before starting it.
-                //This corrects the value of pxTopOfStack that was contaminated
-                // by the last context switch.
-                if( pxConfig->overrunPolicy == POLICY_KILL )
-                {
-                    prvHardResetTask( pxTCB, pxConfig );
-                }
-                /* SUCCESS: Resume directly without calling vTaskResume API */
-                ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
-                prvAddTaskToReadyList( pxTCB );
-
-                //Update absolute deadline for this new job
-                pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
-                
-                //schedule next release
-                pxConfig->xNextRelease += pxConfig->period;
-
-                /* If the released task has higher priority, we must yield later */
-                if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
-                {
-                    xYieldRequired = pdTRUE;
-                }
-            }
-            else
-            {
-                /* OVERRUN: Task did not suspend itself in time */
-
-                // TODO: Add the Trace call here to log the error (DEADLINE MISS / OVERRUN)
-                //something like 
-                traceTASK_OVERRUN(pxTCB,pxConfig->overrunPolicy);
-
-                switch (pxConfig->overrunPolicy)
-                {
-                case POLICY_SKIP:
-                    /* Ignore this release. Update xNextRelease to the future (R_k+2) 
-                       so it no longer fires for this period*/
-                    pxConfig->xNextRelease+=pxConfig->period;
-
-                    break;
-                case POLICY_CATCH_UP:
-                    /* Run this job as soon as possible, incrementing "penidig job and
-                       update xNetRelease to maintain the timeframe"*/
-                    pxConfig->xNextRelease+=pxConfig->period;
-                    pxConfig->ulPendingJobs++;
-                    
-                    break;
-                case POLICY_KILL:
-                    /*Basic implementation (Log and treat as CATCH_UP or SKIP) */
-                    /*
-                    pxConfig->ulPendingJobs=0;
-                    pxConfig->xNextRelease+=pxConfig->period;
-                    */
-                    /*------HARD VERSION-------- */
-
-                    //Reset task (Stack Rewind)
-                    prvHardResetTask(pxTCB,pxConfig);
-                    
-                    // Schedule the next release (skip the current one)
-                    
-                    //Restart at the next period:
-                    pxConfig->xNextRelease+=pxConfig->period;
-
-                    //If the killed task was the running one, we need to force a context switch
-                    if( pxTCB == pxCurrentTCB )
-                    {
-                        xYieldRequired=pdTRUE;    
-                    }
-                    /*---------------------------*/
-                    break;
-                default:
-                    break;
-                }
+                xMinTick = pxCfg->xNextRelease;
             }
         }
+        xNextPeriodicEventTick = xMinTick;
     }
-
-    /* 4. Optimization: Update the global next event time */
-    prvUpdateNextPeriodicEventTick();
-
-    return xYieldRequired;
-}
-
-/*-----------------------------------------------------------*/
-
-static void prvUpdateNextPeriodicEventTick( void )
-{
-    ListItem_t * pxIterator;
-    ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
-    TickType_t xMinTick = portMAX_DELAY;
-
-    for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
-         pxIterator != pxListEnd; 
-         pxIterator = listGET_NEXT( pxIterator ) )
-    {
-        PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
-
-        /* Find the soonest release time in the entire shadow list */
-        if( pxCfg->xNextRelease < xMinTick )
-        {
-            xMinTick = pxCfg->xNextRelease;
-        }
-    }
-    xNextPeriodicEventTick = xMinTick;
-}
+#endif /* configUSE_PERIODIC_SCHEDULER */
 
 /*-----------------------------------------------------------*/
 
@@ -6810,8 +6817,10 @@ static void prvInitialiseTaskLists( void )
     vListInitialise( &xDelayedTaskList2 );
     vListInitialise( &xPendingReadyList );
 
+#if ( configUSE_PERIODIC_SCHEDULER == 1 )
     vListInitialise( &pxPeriodicTasksList );
     xNextPeriodicEventTick = portMAX_DELAY;
+#endif /* configUSE_PERIODIC_SCHEDULER */
 
     #if ( INCLUDE_vTaskDelete == 1 )
     {
