@@ -61,24 +61,47 @@ void vBusyWait( int ticks_simulated )
 /*-----------------------------------------------------------*/
 
 /* Simple aperiodic job that prints a message. */
+/*-----------------------------------------------------------*/
+
 void vAperiodicJobCallback( void *pvParameters )
 {
-    (void) pvParameters; /* Unused */
-    UART_printf( "Aperiodic job: Spawned successfully by task.\n" );
+    /* Buffer to hold the formatted output string. */
+    char cBuffer[ 80 ];
+
+    /* Silence compiler warnings about unused parameters. */
+    ( void ) pvParameters;
+
+    /* Format the string including the current tick count. */
+    sprintf( cBuffer, "[%lu] Aperiodic job: Spawned successfully by task.\n",
+             ( unsigned long ) xTaskGetTickCount() );
+
+    UART_printf( cBuffer );
 }
+/*-----------------------------------------------------------*/
 
 /* Long running aperiodic job for testing purposes. */
 void vAperiodicLongJob( void *pvParameters )
 {
-    (void) pvParameters; /* Unused */
+    /* Buffer to hold the formatted output string. */
+    char cBuffer[ 80 ];
 
-    UART_printf( "Aperiodic Long Job: START\n" );
-    
-    /* Simulate work equivalent to 500ms (approx) */
-    vBusyWait( 5000 ); 
-    
-    UART_printf( "Aperiodic Long Job: END\n" );
+    /* Silence compiler warnings about unused parameters. */
+    ( void ) pvParameters;
+
+    /* Print the start time. */
+    sprintf( cBuffer, "[%lu] Aperiodic Long Job: START\n",
+             ( unsigned long ) xTaskGetTickCount() );
+    UART_printf( cBuffer );
+
+    /* Simulate work equivalent to 500ms (approx). */
+    vBusyWait( 5000 );
+
+    /* Print the end time. */
+    sprintf( cBuffer, "[%lu] Aperiodic Long Job: END\n",
+             ( unsigned long ) xTaskGetTickCount() );
+    UART_printf( cBuffer );
 }
+/*-----------------------------------------------------------*/
 
 /*-----------------------------------------------------------*/
 /* PERIODIC TASK FUNCTIONS                                   */

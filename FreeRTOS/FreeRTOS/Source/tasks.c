@@ -1785,8 +1785,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
         //  vPortFree(pvParameters);                 // free small helper struct // we actually need this // TODO: remove if not needed
 
-        TickType_t last = xTaskGetTickCount();
-
         for (;;)
         {
             pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
@@ -1850,6 +1848,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                                 TaskHandle_t * const pxCreatedTask,
                                 OverrunPolicy_t xTaskPolicy)
     {
+        ( void ) pxCreatedTask;
         PeriodicWrap_t *cfg = pvPortMalloc(sizeof(*cfg));
         if (cfg == NULL)
             return errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
@@ -5759,7 +5758,7 @@ BaseType_t xTaskIncrementTick( void )
     static void prvUpdateNextPeriodicEventTick( void )
     {
         ListItem_t * pxIterator;
-        ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
+        const ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
         TickType_t xMinTick = portMAX_DELAY;
 
         for( pxIterator = listGET_HEAD_ENTRY( &pxPeriodicTasksList ); 
