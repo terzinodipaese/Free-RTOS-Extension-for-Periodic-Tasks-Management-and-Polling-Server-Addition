@@ -131,5 +131,6 @@
 
 #define configENABLE_BACKWARD_COMPATIBILITY 0
 
+#define configUSE_PERIODIC_SCHEDULER 1
 #endif /* FREERTOS_CONFIG_H */
 
