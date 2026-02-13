@@ -19,7 +19,7 @@
 
 #define configMAX_TEST_TASKS 10
 #define configJITTER_MAX_TASKS 4
-#define configTEST_DELAY_MS 1000
+#define configTEST_DELAY_MS 800
 
 /* Event group */
 
@@ -138,10 +138,7 @@ void vTask_Jitter(void *pvParameters)
 
     d->last_release = xNow;
 
-   // vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_RELEASE, xNow);
-   // vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_START, 0);
     BusyMs(1); 
-    //vLoggerStore(pcTaskGetName(NULL), LOGGER_TASK_END, 0);
 }
 
 /**
@@ -247,6 +244,7 @@ static TestResult_t xTest_StressOverlappingHRT(void)
     }else{
         snprintf(res.details, sizeof(res.details), "Deadline misses: %lu", deadline_misses);
     }
+    
 
     return res;
 }
@@ -313,12 +311,10 @@ static TestResult_t xTest_PreemptionHigher(void)
     uint32_t low_starts  = ulLoggerCountEvent("T_Low", LOGGER_TASK_START);
     uint32_t high_misses = ulLoggerCountEvent("T_High", LOGGER_TASK_DEADLINE_MISS);
 
-    if(high_starts > low_starts && high_starts > 0 && low_starts > 0 && high_misses == 0)
-    {
+    if(high_starts > low_starts && high_starts > 0 && low_starts > 0 && high_misses == 0){
         res.passed = true;        
     }else if(high_starts <= low_starts){
-        snprintf(res.details, sizeof(res.details),
-                "Preemption failed: T_High=%lu, T_Low= %lu", high_starts, low_starts);
+        snprintf(res.details, sizeof(res.details),"Preemption failed: T_High=%lu, T_Low= %lu", high_starts, low_starts);
     }else if(high_misses != 0){
         snprintf(res.details, sizeof(res.details), "T_High missed: %lu", high_misses);
     }else{
@@ -418,8 +414,8 @@ static TestResult_t xTest_OverrunPolicySkip(void)
     
     vTestStart();
 
-    xTaskCreatePeriodic(vTask_Generic, "Skip", 512, (void*)15,
-        pdMS_TO_TICKS(10), pdMS_TO_TICKS(10), tskIDLE_PRIORITY+2, &xTestTasks[0], POLICY_SKIP);
+    xTaskCreatePeriodic(vTask_Generic, "Skip", 512, (void*)15, 
+            pdMS_TO_TICKS(10), pdMS_TO_TICKS(10), tskIDLE_PRIORITY+2, &xTestTasks[0], POLICY_SKIP);
 
     ulTestTaskCount = 1; 
 
@@ -467,7 +463,7 @@ static TestResult_t xTest_OverrunPolicyCatchup(void)
         res.passed = true;
     }
     else{
-        snprintf(res.details, sizeof(res.details), 
+        snprintf(res.details, sizeof(res.details),
                 "Skips: %lu, Kills: %lu, Catch-ups: %lu", skips, kills, catchups);
     }
     
@@ -498,9 +494,7 @@ static TestResult_t xTest_OverrunPolicyKill(void){
     if(skips == 0 && kills >= 10 && catchups == 0)
     {
         res.passed = true;
-    }
-    else
-    {
+    }else{
         snprintf(res.details, sizeof(res.details), 
                 "Skips: %lu, Kills: %lu, Catch-ups: %lu", skips, kills, catchups);
     }
@@ -597,6 +591,7 @@ static TestResult_t xTest_CPUOverhead(void)
         snprintf(res.details, sizeof(res.details), 
                 "CPU overhead exceeds the limit, actual: %lu%%", overhead);
     }
+
     
     return res;
 }
@@ -813,6 +808,8 @@ static TestResult_t xTest_CPUOverhead(void)
 
 /* CFG TASK TESTS */
 
+
+
 /**
  * @brief Test 16: cfg basic configuration
  * @details Check config
@@ -822,21 +819,53 @@ static TestResult_t xTest_ConfigBasic(void)
     TestResult_t res = {.passed = false, .details = ""};
 
     vTestStart();
+
+    static PeriodicTaskConfig_t cfgTasks[] = {
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "CfgA",
+            .pvParameters = (void*)5,
+            .usStackDepth = 1024,
+            .uxPriority = tskIDLE_PRIORITY+3,
+            .xPeriod = pdMS_TO_TICKS(20),
+            .pxCreatedTask = &xTestTasks[0],
+            .xDeadline = pdMS_TO_TICKS(20),
+            
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "CfgB",
+            .pvParameters = (void*)8,
+            .usStackDepth = 1024,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(30),
+            .pxCreatedTask = &xTestTasks[1],
+            .xDeadline = pdMS_TO_TICKS(30),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "CfgC",
+            .pvParameters = (void*)10,
+            .usStackDepth = 1024,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = &xTestTasks[2],
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
+        }
+    };
     
     SchedulerConfig_t cfg = {
         .globalPolicy = POLICY_SKIP,
-        .trace_enabled = pdTRUE,
         .max_tasks = 20,
-        .pxTasks = (PeriodicTaskConfig_t[]) {
-            {vTask_Generic,"CfgA",(void*)5, 1024, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(20), pdMS_TO_TICKS(20),POLICY_SKIP},
-            {vTask_Generic,"CfgB",(void*)8, 1024, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(30), pdMS_TO_TICKS(30),POLICY_SKIP},
-            {vTask_Generic,"CfgC",(void*)10, 1024, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50),POLICY_SKIP}
-        },
+        .trace_enabled = pdTRUE,
+        .uxNumTasks = 3,
+        .pxTasks = cfgTasks
     };
     
     vConfigureScheduler(&cfg);
-   
-    
     vTaskDelay(pdMS_TO_TICKS(300));
     vTestStop();
     
@@ -866,20 +895,51 @@ static TestResult_t xTest_ConfigPriorities(void)
 
     vTestStart();
     
-    SchedulerConfig_t cfg = {
-        .globalPolicy = POLICY_SKIP,
-        .trace_enabled = pdTRUE,
-        .max_tasks = 20,
-        .pxTasks = (PeriodicTaskConfig_t[]) {
-            {"P1",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {"P3",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {"P5",vTask_Generic,(void*)5, 512, tskIDLE_PRIORITY+5, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
+    static PeriodicTaskConfig_t cfgTasks[] = {
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "P1",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+1,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = &xTestTasks[0],
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "P3",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+3,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = &xTestTasks[1],
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "P5",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+5,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = &xTestTasks[2],
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
         }
     };
     
-    vConfigureScheduler(&cfg);
-   
+    SchedulerConfig_t cfg = {
+        .globalPolicy = POLICY_SKIP,
+        .max_tasks = 20,
+        .trace_enabled = pdTRUE,
+        .uxNumTasks = 3,
+        .pxTasks = cfgTasks
+    };
     
+    vConfigureScheduler(&cfg);
     vTaskDelay(pdMS_TO_TICKS(200));
     vTestStop();
     
@@ -891,8 +951,7 @@ static TestResult_t xTest_ConfigPriorities(void)
         res.passed = true;
     }
     else{
-        snprintf(res.details, sizeof(res.details), 
-                "P1: %lu, P3: %lu, P5: %lu", p1_starts, p3_starts, p5_starts);
+        snprintf(res.details, sizeof(res.details), "P1: %lu, P3: %lu, P5: %lu", p1_starts, p3_starts, p5_starts);
     }
 
     return res;
@@ -908,26 +967,106 @@ static TestResult_t xTest_ConfigMaxTasks(void)
 
     vTestStart();
     
-    /* Create config with 8 tasks */
-    SchedulerConfig_t cfg = {
-        .globalPolicy = POLICY_SKIP,
-        .trace_enabled = pdTRUE,
-        .max_tasks = 20,
-        .pxTasks =(PeriodicTaskConfig_t[]) {
-            {"M1",vTask_Generic, (void*)5,  512, tskIDLE_PRIORITY+4, pdMS_TO_TICKS(50),  pdMS_TO_TICKS(50)},
-            {"M2",vTask_Generic, (void*)8,  512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(100), pdMS_TO_TICKS(100)},
-            {"M3",vTask_Generic, (void*)12, 512, tskIDLE_PRIORITY+3, pdMS_TO_TICKS(150), pdMS_TO_TICKS(150)},
-            {"M4",vTask_Generic, (void*)15, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(200), pdMS_TO_TICKS(200)},
-            {"M5",vTask_Generic, (void*)18, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(250), pdMS_TO_TICKS(250)},
-            {"M6",vTask_Generic, (void*)20, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(300), pdMS_TO_TICKS(300)},
-            {"M7",vTask_Generic, (void*)25, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(400), pdMS_TO_TICKS(400)},
-            {"M8",vTask_Generic, (void*)30, 512, tskIDLE_PRIORITY+1, pdMS_TO_TICKS(500), pdMS_TO_TICKS(500)}
+    static PeriodicTaskConfig_t cfgTasks[] = {
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M1",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+4,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = &xTestTasks[0],
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M2",
+            .pvParameters = (void*)8,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+3,
+            .xPeriod = pdMS_TO_TICKS(100),
+            .pxCreatedTask = &xTestTasks[1],
+            .xDeadline = pdMS_TO_TICKS(100),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M3",
+            .pvParameters = (void*)12,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+3,
+            .xPeriod = pdMS_TO_TICKS(150),
+            .pxCreatedTask = &xTestTasks[2],
+            .xDeadline = pdMS_TO_TICKS(150),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M4",
+            .pvParameters = (void*)15,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(200),
+            .pxCreatedTask = &xTestTasks[3],
+            .xDeadline = pdMS_TO_TICKS(200),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M5",
+            .pvParameters = (void*)18,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(250),
+            .pxCreatedTask = &xTestTasks[4],
+            .xDeadline = pdMS_TO_TICKS(250),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M6",
+            .pvParameters = (void*)20,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(300),
+            .pxCreatedTask = &xTestTasks[5],
+            .xDeadline = pdMS_TO_TICKS(300),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M7",
+            .pvParameters = (void*)25,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+1,
+            .xPeriod = pdMS_TO_TICKS(400),
+            .pxCreatedTask = &xTestTasks[6],
+            .xDeadline = pdMS_TO_TICKS(400),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "M8",
+            .pvParameters = (void*)30,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+1,
+            .xPeriod = pdMS_TO_TICKS(500),
+            .pxCreatedTask = &xTestTasks[7],
+            .xDeadline = pdMS_TO_TICKS(500),
+            .xTaskPolicy = POLICY_SKIP
         }
     };
 
+    SchedulerConfig_t cfg = {
+        .globalPolicy = POLICY_SKIP,
+        .max_tasks = 20,
+        .trace_enabled = pdTRUE,
+        .uxNumTasks = 8,
+        .pxTasks = cfgTasks
+    };
+
     vConfigureScheduler(&cfg);
-  
-    
     vTaskDelay(pdMS_TO_TICKS(1000));
     vTestStop();
     
@@ -935,8 +1074,7 @@ static TestResult_t xTest_ConfigMaxTasks(void)
     uint32_t tasks_ran = 0;
     uint32_t total_misses = 0;
     
-    for(int i = 1; i <= 8; i++)
-    {
+    for(int i = 1; i <= 8; i++){
         char name[8];
         snprintf(name, sizeof(name), "M%d", i);
         
@@ -947,12 +1085,9 @@ static TestResult_t xTest_ConfigMaxTasks(void)
         total_misses += misses;
     }
 
-    if(tasks_ran == 8 && total_misses == 0)
-    {
+    if(tasks_ran == 8 && total_misses == 0){
         res.passed = true;
-    }
-    else
-    {
+    }else{
         snprintf(res.details, sizeof(res.details), 
                 "Tasks ran: %lu/8, Total misses: %lu", tasks_ran, total_misses);
     }
@@ -971,25 +1106,45 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     /* Part 1: Cfg creation */
     vLoggerInit();
     
-    SchedulerConfig_t cfg = {
-        .globalPolicy = POLICY_SKIP,
-        .trace_enabled = pdTRUE,
-        .max_tasks = 20,
-        .pxTasks = {
-            {"Cfg1",vTask_Generic, (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)},
-            {"Cfg2",vTask_Generic, (void*)5, 512, tskIDLE_PRIORITY+2, pdMS_TO_TICKS(50), pdMS_TO_TICKS(50)}
+    static PeriodicTaskConfig_t cfgTasks[] = {
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "D1",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = NULL,
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
+        },
+        {
+            .pxTaskCode = vTask_Generic,
+            .pcName = "D2",
+            .pvParameters = (void*)5,
+            .usStackDepth = 512,
+            .uxPriority = tskIDLE_PRIORITY+2,
+            .xPeriod = pdMS_TO_TICKS(50),
+            .pxCreatedTask = NULL,
+            .xDeadline = pdMS_TO_TICKS(50),
+            .xTaskPolicy = POLICY_SKIP
         }
     };
     
+    SchedulerConfig_t cfg = {
+        .globalPolicy = POLICY_SKIP,
+        .max_tasks = 20,
+        .trace_enabled = pdTRUE,
+        .uxNumTasks = 2,
+        .pxTasks = cfgTasks
+    };
+    
     vTestStart();
-
     vConfigureScheduler(&cfg);
-    
-    
     vTaskDelay(pdMS_TO_TICKS(300));
     
-    uint32_t cfg1_runs = ulLoggerCountEvent("Cfg1", LOGGER_TASK_START);
-    uint32_t cfg2_runs = ulLoggerCountEvent("Cfg2", LOGGER_TASK_START);
+    uint32_t cfg1_runs = ulLoggerCountEvent("D1", LOGGER_TASK_START);
+    uint32_t cfg2_runs = ulLoggerCountEvent("D2", LOGGER_TASK_START);
     uint32_t cfg_diff = (cfg1_runs > cfg2_runs) ? (cfg1_runs - cfg2_runs) : (cfg2_runs - cfg1_runs);
     
     vStopScheduler();
@@ -1020,9 +1175,7 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     if(cfg1_runs >= 5 && cfg2_runs >= 5 && dyn1_runs >= 5 && dyn2_runs >= 5 && cfg_diff <= 2){
         res.passed = true;
     }else{
-        snprintf(res.details, sizeof(res.details), 
-                "Cfg: %lu/%lu (diff=%lu), Dyn: %lu/%lu (diff=%lu)",
-                cfg1_runs, cfg2_runs, cfg_diff, dyn1_runs, dyn2_runs, dyn_diff);
+        snprintf(res.details, sizeof(res.details),"Cfg: %lu/%lu (diff=%lu), Dyn: %lu/%lu (diff=%lu)",cfg1_runs, cfg2_runs, cfg_diff, dyn1_runs, dyn2_runs, dyn_diff);
     }
 
     return res;
@@ -1074,7 +1227,7 @@ void vTestSuite(void)
         TestResult_t result = xTests[i].func();
         vStopScheduler();
 
-        snprintf(s, sizeof(s), "Test %s: %s  %s\r\n", 
+        snprintf(s, sizeof(s), "STEL Test %s: %s  %s\r\n", 
                 xTests[i].pcName,
                 result.passed ? "PASSED" : "FAILED", 
                 result.details);
@@ -1086,7 +1239,7 @@ void vTestSuite(void)
         vTaskDelay(pdMS_TO_TICKS(configTEST_DELAY_MS));
     }
 
-    snprintf(s, sizeof(s), "Tests Passed: %lu/%lu\r\n", ulPassed, NUM_TESTS);
+    snprintf(s, sizeof(s), "Tests Passed: %lu/%u\r\n", ulPassed, NUM_TESTS);
     UART_printf(s);
 
     if(xTestEventGroup != NULL){

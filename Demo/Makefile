@@ -229,7 +229,7 @@ gdb_start:
 
 
 
-test-build: $(TEST_ELF)
+test_build: $(TEST_ELF)
 
 
 
@@ -244,20 +244,37 @@ $(TEST_ELF): $(TEST_OBJS_OUTPUT) ./mps2_m3.ld Makefile
 
 
 
-test-run: test-build
+test_run: test_build
 	@echo "\n---Running Test suite in QEMU--\n"
 	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
 	$(TEST_ELF) -monitor none -nographic -serial stdio
 
 
-test-clean:
+test_clean:
 	rm -f $(TEST_ELF) $(TEST_MAP) $(TEST_OUTPUT_DIR)/*.o
 
 
-test: test-build test-run
+test_qemu_start:
+	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
+	$(TEST_ELF) -monitor none -nographic -serial stdio
 
 
-.PHONY: all clean cleanobj qemu_start qemu_debug gdb_start test-build test-run test test-clean
+test_qemu_debug: test_build
+	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
+	$(TEST_ELF) -monitor none -nographic -serial stdio $(QEMU_FLAGS_DBG)
+
+
+test_gdb_start:
+	gdb-multiarch \
+		-ex "target remote localhost:1234" \
+		-ex "layout src" \
+		$(TEST_ELF)
+
+
+test: test_build test_run
+
+
+.PHONY: all clean cleanobj qemu_start qemu_debug gdb_start test_build test_run test test_clean test_gdb_start test_qemu_debug test_qemu_start
 
 
 

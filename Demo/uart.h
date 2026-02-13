@@ -1,7 +1,7 @@
 #ifndef __PRINTF__
 #define __PRINTF__
 
-#define DBG_UART;
+#define DBG_UART
 
 #include "FreeRTOS.h"
 

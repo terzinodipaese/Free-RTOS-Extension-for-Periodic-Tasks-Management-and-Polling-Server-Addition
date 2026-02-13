@@ -27,6 +27,11 @@ typedef struct {
     void *pvValue; // generic field
 } LoggerEntry_t;
 
+void vLoggerResetIdleTime(void);
+
+uint32_t ulLoggerGetIdleTime(void);
+
+
 void vLoggerInit(void);
 
 
@@ -41,6 +46,16 @@ void vLoggerPrint(void);
 
 void vLoggerTask(void *pvParameters);
 
-void vLoggerResetIdleTime(void);
+/*for test suite*/
+
+BaseType_t xLoggerHasEvent(LoggerEventType_t type);
+
+uint32_t ulLoggerCountEvent(const char *taskname, LoggerEventType_t type);
+
+BaseType_t xLoggerDeadlineMiss(LoggerEventType_t type);
+
+TickType_t xLoggerGetFirstEventTime(const char *taskname, LoggerEventType_t type);
+
+
 
 #endif

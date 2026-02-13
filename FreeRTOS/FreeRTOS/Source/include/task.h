@@ -3812,7 +3812,7 @@ typedef struct {
     TickType_t xPeriod;             
     TickType_t xDeadline;
     UBaseType_t uxPriority;         // FreeRTOS Priority
-    
+    TaskHandle_t * const pxCreatedTask;  //added
     OverrunPolicy_t xTaskPolicy;    //task policy
 } PeriodicTaskConfig_t;
 
@@ -3843,6 +3843,7 @@ TickType_t xTaskGetDeadline( TaskHandle_t xTask );
 
 void vConfigureScheduler(SchedulerConfig_t *pxCfg);     //PEOS configuration function prototype
 
+void vTaskDeletePeriodic(TaskHandle_t xTaskToDelete);
 /*----------------------------------------------*/
 
 #endif /* INC_TASK_H */
