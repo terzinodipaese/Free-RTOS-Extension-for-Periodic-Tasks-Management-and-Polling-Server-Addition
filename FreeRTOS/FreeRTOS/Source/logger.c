@@ -106,7 +106,7 @@ void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, v
 
 
 
-void vApplicationIdleHook(void){
+void vApplicationIdleHook(void) {
     TickType_t now = xTaskGetTickCountFromISR();
     if (now != ulLastIdleTick){
         ulIdleTicks++;
@@ -115,12 +115,10 @@ void vApplicationIdleHook(void){
 }
 
 void vLoggerResetIdleTime(void){
-    taskENTER_CRITICAL();
-    {
-        ulIdleTicks = 0;
-        ulLastIdleTick = xTaskGetTickCount();
-    }
-    taskEXIT_CRITICAL();
+    
+    ulIdleTicks = 0;
+    ulLastIdleTick = xTaskGetTickCount();
+    
 }
 
 uint32_t ulLoggerGetIdleTime(void)
@@ -191,7 +189,7 @@ void vLoggerPrint(void){
                         (unsigned long) e->ulTimestamp);
                 break;
 
-               
+                  UART_printf(s);       
             case LOGGER_TASK_OVERRUN_SKIP:
                 snprintf(s,sizeof(s),
                         "[%6lu] %8s OVERRUN → SKIP\r\n",
@@ -279,9 +277,6 @@ BaseType_t xLoggerHasEvent(LoggerEventType_t type){
     taskEXIT_CRITICAL();
     return xFound;
 }
-
-
-
 
 uint32_t ulLoggerCountEvent(const char *taskname, LoggerEventType_t type){
     uint32_t ulCount = 0;

@@ -1787,8 +1787,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         const char *pcName = pcTaskGetName(NULL);
         
 
-        vLoggerStore(pcName, LOGGER_TASK_RELEASE, 0);
-
         for (;;)
         {
             pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */

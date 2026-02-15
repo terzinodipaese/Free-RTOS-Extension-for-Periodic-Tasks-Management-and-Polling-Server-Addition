@@ -194,7 +194,6 @@ void vStopScheduler(void)
     vTaskDelay(pdMS_TO_TICKS(50));
     vDeleteTestTasks(); 
     memset(xJitterData, 0, sizeof(xJitterData));
-    vLoggerInit();
 }
 
 /* PERIODIC TASK TESTS - PROJECT 2 */
@@ -1104,8 +1103,6 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     TestResult_t res = {.passed = false, .details = ""};
 
     /* Part 1: Cfg creation */
-    vLoggerInit();
-    
     static PeriodicTaskConfig_t cfgTasks[] = {
         {
             .pxTaskCode = vTask_Generic,
@@ -1150,7 +1147,6 @@ static TestResult_t xTest_ConfigVsDynamic(void)
     vStopScheduler();
     vTestStop();
     vTaskDelay(pdMS_TO_TICKS(50));
-    vLoggerInit();
     
     /* Part 2: Dynamic creation */
     vTestStart();
@@ -1221,8 +1217,6 @@ void vTestSuite(void)
 
     for(uint32_t i = 0; i < NUM_TESTS; i++)
     {
-        /* Reset logger */
-        vLoggerInit();
 
         TestResult_t result = xTests[i].func();
         vStopScheduler();
