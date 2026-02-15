@@ -34,10 +34,10 @@ void vLoggerInit(void){
 
     //create logger task 
     xTaskCreate(vLoggerTask,
-                    "Logger",
+                    "LOGGER",
                     256,
                     NULL,
-                    tskIDLE_PRIORITY, //add +1
+                    tskIDLE_PRIORITY +1, //add +1
                     &xLoggerTaskHandle);
 
 }
@@ -174,6 +174,12 @@ void vLoggerPrint(void){
             case LOGGER_TASK_END:
                 snprintf(s,sizeof(s),
                         "[%6lu] %8s COMPLETE\r\n",
+                        (unsigned long) e->ulTimestamp,
+                        e->pcTaskName);
+                break;
+            case LOGGER_TASK_SUSPEND:
+                snprintf(s,sizeof(s),
+                        "[%6lu] %8s SUSPEND\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;

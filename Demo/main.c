@@ -50,7 +50,7 @@ int main(int argc, char **argv){
 
 	//xTaskCreatePeriodic(HelloTask2, "MyTask2", 2048, NULL, pdMS_TO_TICKS(500), pdMS_TO_TICKS(10000), 2, NULL);
 
-	//xTaskCreate(HelloTask2, "Hello2", configMINIMAL_STACK_SIZE + 64, NULL, tskIDLE_PRIORITY + 1, &xHandle);
+	//xTaskCreate(HelloTask2, "Hello2", configMINIMAL_STACK_SIZE + 64, NULL, tskIDLE_PRIORITY + 2, &xHandle);
 	//xTaskSetPeriod( xHandle, 100 );   
 
 
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
  * FUNZIONI DI TEST
  * =========================================================== */
 
-/*
+
 // Funzione per "bruciare" tempo (Busy Wait) 
 void vBusyWait( int ticks_simulated )
 {
@@ -97,39 +97,6 @@ void vBusyWait( int ticks_simulated )
     for( i = 0; i < ( ticks_simulated * 15000 ); i++ ) 
     {
         __asm volatile( "nop" );
-    }
-}*/
-
-void vBusyWait( int ticks_simulated )
-{
-    // Define how often to yield (e.g., every 10 ticks of work)
-    const int chunk_size = 10; 
-    
-    int remaining = ticks_simulated;
-    volatile int i;
-    
-    // Calibrate this multiplier for your QEMU speed!
-    // If tasks finish too fast, increase this (e.g. 50000 or 100000)
-    const int loops_per_tick = 25000; 
-
-    while (remaining > 0)
-    {
-        // 1. Determine how much work to do in this chunk
-        int current_chunk = (remaining > chunk_size) ? chunk_size : remaining;
-        
-        // 2. BURN CPU (Simulate Work)
-        for( i = 0; i < ( current_chunk * loops_per_tick ); i++ ) 
-        {
-            __asm volatile( "nop" );
-        }
-        
-        // 3. FORCE CONTEXT SWITCH
-        // vTaskDelay(1) puts this task in Blocked state for 1 tick.
-        // This allows Lower Priority tasks (Logger) to execute immediately.
-        vTaskDelay(1);
-
-        // 4. Update remaining time
-        remaining -= current_chunk;
     }
 }
 
@@ -196,7 +163,7 @@ int main( void )
             .pxTaskCode = vTestTask,
             .pvParameters = "TASK_KILL",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority = 1,
+            .uxPriority = tskIDLE_PRIORITY + 2,
             .xPeriod = 100,      
             .xDeadline = 100,
             .xTaskPolicy = POLICY_KILL
@@ -210,7 +177,7 @@ int main( void )
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
             /* Priorità leggermente più alta per vederlo emergere nel log */
             //.uxPriority = 2, 
-			.uxPriority=1,    
+			.uxPriority= tskIDLE_PRIORITY + 2,   
             .xPeriod = 100,      
             .xDeadline = 500,
 			.xTaskPolicy = POLICY_SKIP
@@ -223,7 +190,7 @@ int main( void )
             .pxTaskCode = vTestTask,
             .pvParameters = "T_CATCH",
             .usStackDepth = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority = 1,
+            .uxPriority = tskIDLE_PRIORITY + 2, 
             .xPeriod = 100,      
             .xDeadline = 100,
             .xTaskPolicy = POLICY_CATCH_UP 
