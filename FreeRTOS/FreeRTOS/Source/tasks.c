@@ -5649,7 +5649,6 @@ BaseType_t xTaskIncrementTick( void )
     static BaseType_t prvProcessPeriodicTasks( const TickType_t xCurrentTickCount )
     {
         ListItem_t * pxIterator;
-        /* Cast to remove const qualifier warning */
         ListItem_t * const pxListEnd = ( ListItem_t * ) listGET_END_MARKER( &pxPeriodicTasksList );
         PeriodicWrap_t * pxConfig;
         BaseType_t xYieldRequired = pdFALSE;
@@ -5660,39 +5659,61 @@ BaseType_t xTaskIncrementTick( void )
             pxIterator = listGET_NEXT( pxIterator ) )
         {
             pxConfig = ( PeriodicWrap_t * ) listGET_LIST_ITEM_OWNER( pxIterator );
-            
-            if(pxConfig->pxTaskHandle==NULL) continue;
-
+            if( pxConfig->pxTaskHandle == NULL ) continue;
             pxTCB = ( TCB_t * ) pxConfig->pxTaskHandle;
 
-            /* Check for RELEASE TIME (R_k) */
+            /* --- 1. DEADLINE MONITORING (D_k) --- */
+            if( xCurrentTickCount >= pxConfig->xNextDeadline )
+            {
+                /* Check: Is the task still working past its deadline? */
+                if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) == pdFALSE )
+                {
+                    /* DEADLINE MISS: Log the miss immediately */
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, (void *) pxTCB->xDeadline );
+
+                    switch (pxConfig->overrunPolicy)
+                    {
+                        case POLICY_SKIP:
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
+                            /* Note: Standard SKIP lets the job finish but skips next release */
+                            break;
+                        case POLICY_CATCH_UP:
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
+                            pxConfig->ulPendingJobs++;
+                            break;
+                        case POLICY_KILL:
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
+                            prvHardResetTask(pxTCB, pxConfig); /* Force termination */
+                            if( pxTCB == pxCurrentTCB ) xYieldRequired = pdTRUE;
+                            break;
+                    }
+                }
+                /* Reset deadline check for this job cycle */
+                pxConfig->xNextDeadline = portMAX_DELAY;
+            }
+
+            /* --- 2. RELEASE MONITORING (R_k) --- */
             if( xCurrentTickCount >= pxConfig->xNextRelease )
             {
-                /* INTERNAL CHECK: Is the task in the suspended list? */
                 if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
                 {
-                    // IMPORTANT: HARD KILL 
-                    // If the policy is KILL, we reset the stack NOW, before starting it.
-                    // This corrects the value of pxTopOfStack that was contaminated
-                    // by the last context switch.
+                    /* SUCCESS PATH: Task ready for new period */
                     if( pxConfig->overrunPolicy == POLICY_KILL )
                     {
                         prvHardResetTask( pxTCB, pxConfig );
                     }
-                    /* SUCCESS: Resume directly without calling vTaskResume API */
+
                     ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
 
-                    // Update absolute deadline for this new job
-                    pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
-
-                    /* LOG: Log that the task has been released (made Ready) */
-                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, (void *) pxTCB->xDeadline );
+                    /* Set timing for the new job instance */
+                    pxTCB->xDeadline = pxConfig->xNextRelease + pxConfig->deadline;
+                    pxConfig->xNextDeadline = pxTCB->xDeadline;
                     
-                    // schedule next release
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, (void *) pxTCB->xDeadline );
+
                     pxConfig->xNextRelease += pxConfig->period;
 
-                    /* If the released task has higher priority, we must yield later */
                     if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
                     {
                         xYieldRequired = pdTRUE;
@@ -5700,68 +5721,33 @@ BaseType_t xTaskIncrementTick( void )
                 }
                 else
                 {
-                    /* OVERRUN: Task did not suspend itself in time */
-
-                    /* LOG: Log the deadline miss */
-                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, (void *) pxTCB->xDeadline );
+                    /* PERIOD OVERRUN PATH: Task not finished at start of next period */
+                    if (pxConfig->deadline == pxConfig->period)
+                    {
+                        vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, (void *) pxTCB->xDeadline );
+                    }
 
                     switch (pxConfig->overrunPolicy)
                     {
-                    case POLICY_SKIP:
-                        /* LOG: Log that the task has been skipped */
-                        vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
-
-                        /* Ignore this release. Update xNextRelease to the future (R_k+2) 
-                        so it no longer fires for this period*/
-                        pxConfig->xNextRelease+=pxConfig->period;
-
-                        break;
-                    case POLICY_CATCH_UP:
-                        /* LOG: Log that the task is trying to catch up */
-                        vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
-
-                        /* Run this job as soon as possible, incrementing "penidig job and
-                        update xNetRelease to maintain the timeframe"*/
-                        pxConfig->xNextRelease+=pxConfig->period;
-                        pxConfig->ulPendingJobs++;
-                        
-                        break;
-                    case POLICY_KILL:
-                        /* LOG: Log that the task has been killed */
-                        vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
-
-                        /* Basic implementation (Log and treat as CATCH_UP or SKIP) */
-                        /*
-                        pxConfig->ulPendingJobs=0;
-                        pxConfig->xNextRelease+=pxConfig->period;
-                        */
-                        /*------HARD VERSION-------- */
-
-                        //Reset task (Stack Rewind)
-                        prvHardResetTask(pxTCB,pxConfig);
-                        
-                        // Schedule the next release (skip the current one)
-                        
-                        //Restart at the next period:
-                        pxConfig->xNextRelease+=pxConfig->period;
-
-                        //If the killed task was the running one, we need to force a context switch
-                        if( pxTCB == pxCurrentTCB )
-                        {
-                            xYieldRequired=pdTRUE;    
-                        }
-                        /*---------------------------*/
-                        break;
-                    default:
-                        break;
+                        case POLICY_SKIP:
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
+                            pxConfig->xNextRelease += pxConfig->period; /* Skip current activation */
+                            break;
+                        case POLICY_CATCH_UP:
+                            pxConfig->xNextRelease += pxConfig->period;
+                            break;
+                        case POLICY_KILL:
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
+                            prvHardResetTask(pxTCB, pxConfig);
+                            pxConfig->xNextRelease += pxConfig->period;
+                            if( pxTCB == pxCurrentTCB ) xYieldRequired = pdTRUE;
+                            break;
                     }
                 }
             }
         }
 
-        /* Optimization: Update the global next event time */
         prvUpdateNextPeriodicEventTick();
-
         return xYieldRequired;
     }
 
@@ -5783,6 +5769,10 @@ BaseType_t xTaskIncrementTick( void )
             if( pxCfg->xNextRelease < xMinTick )
             {
                 xMinTick = pxCfg->xNextRelease;
+            }
+
+            if( pxCfg->xNextDeadline < xMinTick ){
+                xMinTick = pxCfg->xNextDeadline;
             }
         }
         xNextPeriodicEventTick = xMinTick;
