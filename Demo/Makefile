@@ -247,7 +247,8 @@ $(TEST_ELF): $(TEST_OBJS_OUTPUT) ./mps2_m3.ld Makefile
 test_run: test_build
 	@echo "\n---Running Test suite in QEMU--\n"
 	qemu-system-arm -machine $(MACHINE) -cpu $(CPU) -kernel \
-	$(TEST_ELF) -monitor none -nographic -serial stdio
+	$(TEST_ELF) -monitor none -nographic -serial stdio \
+	-semihosting
 
 
 test_clean:
