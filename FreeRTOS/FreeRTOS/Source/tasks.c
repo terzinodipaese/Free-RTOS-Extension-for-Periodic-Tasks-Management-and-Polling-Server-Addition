@@ -5284,16 +5284,6 @@ BaseType_t xTaskIncrementTick( void )
 #define DBG_UART
 #include "uart.h"
 #endif
-#ifndef traceTASK_OVERRUN
-    #define traceTASK_OVERRUN( pxTCB, policy ) \
-    char s[100];\
-        sprintf(s,"[ %lu ] %s OVERRUN -> Policy: %d\n", \
-                xTaskGetTickCount(), \
-                ( pxTCB )->pcTaskName, \
-                 policy );\
-                UART_printf(s);
-    
-#endif
 #ifndef tracePOLLING_SERVER
     #define tracePOLLING_SERVER() \
         UART_printf("Polling server\n");
@@ -5319,35 +5309,6 @@ BaseType_t xTaskIncrementTick( void )
 					xJob.xPolicy); \
 		UART_printf(a2);
 #endif
-
-/*-----------------------------------------------------------*/
-
-#ifndef traceDEADLINE_KILL
-    #define traceDEADLINE_KILL( ulTaskID )                                              \
-        do                                                                              \
-        {                                                                               \
-            char cBuffer[ 80 ];                                                         \
-            sprintf( cBuffer,                                                           \
-                     "[%lu] DEADLINE MISS (KILL): Task %lu terminated by Server.\n",    \
-                     ( unsigned long ) xTaskGetTickCount(),                             \
-                     ( unsigned long ) ( ulTaskID ) );                                  \
-            UART_printf( cBuffer );                                                     \
-        } while( 0 )
-#endif
-
-#ifndef traceDEADLINE_MISS
-    #define traceDEADLINE_MISS( ulTaskID )                                              \
-        do                                                                              \
-        {                                                                               \
-            char cBuffer[ 80 ];                                                         \
-            sprintf( cBuffer,                                                           \
-                     "[%lu] DEADLINE MISS (OVERRUN): Task %lu allowed to finish.\n",    \
-                     ( unsigned long ) xTaskGetTickCount(),                             \
-                     ( unsigned long ) ( ulTaskID ) );                                  \
-            UART_printf( cBuffer );                                                     \
-        } while( 0 )
-#endif
-
 
             
 #if( configUSE_PERIODIC_SCHEDULER == 1)
@@ -5590,14 +5551,11 @@ BaseType_t xTaskIncrementTick( void )
                             if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
                             {
                                 /* CONSTRAINT: Terminate the task immediately. */
-                                traceDEADLINE_KILL( pxJob->ulTaskID );
                                 vTaskDelete( xWorkerHandle );
                             }
                             else
                             {
                                 /* CONSTRAINT: Allow execution to continue (Overrun). */
-                                traceDEADLINE_MISS( pxJob->ulTaskID );
-
                                 /* Wait indefinitely for the task to finish, effectively
                                 ignoring the deadline. */
                                 ( void ) ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
