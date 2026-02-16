@@ -72,7 +72,7 @@ void vAperiodicJobCallback( void *pvParameters )
     ( void ) pvParameters;
 
     /* Format the string including the current tick count. */
-    sprintf( cBuffer, "[%lu] Aperiodic job: Spawned successfully by task.\n",
+    sprintf( cBuffer, "{%lu} Aperiodic job: Spawned successfully by task.\n",
              ( unsigned long ) xTaskGetTickCount() );
 
     UART_printf( cBuffer );
@@ -89,7 +89,7 @@ void vAperiodicLongJob( void *pvParameters )
     ( void ) pvParameters;
 
     /* Print the start time. */
-    sprintf( cBuffer, "[%lu] Aperiodic Long Job: START\n",
+    sprintf( cBuffer, "{%lu} Aperiodic Long Job: START\n",
              ( unsigned long ) xTaskGetTickCount() );
     UART_printf( cBuffer );
 
@@ -97,7 +97,7 @@ void vAperiodicLongJob( void *pvParameters )
     vBusyWait( 5000 );
 
     /* Print the end time. */
-    sprintf( cBuffer, "[%lu] Aperiodic Long Job: END\n",
+    sprintf( cBuffer, "{%lu} Aperiodic Long Job: END\n",
              ( unsigned long ) xTaskGetTickCount() );
     UART_printf( cBuffer );
 }
@@ -119,7 +119,7 @@ void vTaskKillPolicyTest( void *pvParameters )
     char s[80];
 
     /* 1. START MSG */
-    sprintf( s, "[%lu] %s: START Job\n", xTaskGetTickCount(), pcName );
+    sprintf( s, "{%lu} %s: START Job\n", xTaskGetTickCount(), pcName );
     UART_printf( s );
 
     /* 2. Simulate Work (Overrun) */
@@ -127,7 +127,7 @@ void vTaskKillPolicyTest( void *pvParameters )
     
     /* 3. END MSG */
     /* If Policy is KILL, this line should NEVER be reached. */
-    sprintf( s, "[%lu] %s: END (Error: Should have been KILLED)\n", xTaskGetTickCount(), pcName );
+    sprintf( s, "{%lu} %s: END (Error: Should have been KILLED)\n", xTaskGetTickCount(), pcName );
     UART_printf( s );
 }
 
@@ -142,7 +142,7 @@ void vTaskSkipPolicyTest( void *pvParameters )
     char s[80];
 
     /* 1. START MSG */
-    sprintf( s, "[%lu] %s: START Job\n", xTaskGetTickCount(), pcName );
+    sprintf( s, "{%lu} %s: START Job\n", xTaskGetTickCount(), pcName );
     UART_printf( s );
 
     /* 2. Simulate Work (Overrun) */
@@ -151,7 +151,7 @@ void vTaskSkipPolicyTest( void *pvParameters )
     
     /* 3. END MSG */
     /* SKIP and CATCH_UP policies will reach here (late). */
-    sprintf( s, "[%lu] %s: END\n", xTaskGetTickCount(), pcName );
+    sprintf( s, "{%lu} %s: END\n", xTaskGetTickCount(), pcName );
     UART_printf( s );
 }
 
@@ -165,7 +165,7 @@ void vTaskAperiodicSpawner( void *pvParameters )
     char s[80];
 
     /* 1. START MSG */
-    sprintf( s, "[%lu] %s: START Job\n", xTaskGetTickCount(), pcName );
+    sprintf( s, "{%lu} %s: START Job\n", xTaskGetTickCount(), pcName );
     UART_printf( s );
 
     /* 2. Spawn the Aperiodic Task */
@@ -200,9 +200,9 @@ int main( void )
             .pxTaskCode     = vTaskKillPolicyTest,
             .pvParameters   = "TASK_KILL",
             .usStackDepth   = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority     = 2,
-            .xPeriod        = 100,      
-            .xDeadline      = 100,
+            .uxPriority     = tskIDLE_PRIORITY + 3,
+            .xPeriod        = 1000,      
+            .xDeadline      = 1000,
             .xTaskPolicy    = POLICY_KILL
         },
 
@@ -213,9 +213,9 @@ int main( void )
             .pxTaskCode     = vTaskSkipPolicyTest,
             .pvParameters   = "TASK_SKIP_PARAM",
             .usStackDepth   = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority     = 2,    
-            .xPeriod        = 100,      
-            .xDeadline      = 500, /* Larger deadline to allow completion */
+            .uxPriority     = tskIDLE_PRIORITY + 3,    
+            .xPeriod        = 1000,      
+            .xDeadline      = 5000, /* Larger deadline to allow completion */
             .xTaskPolicy    = POLICY_SKIP
         },
 
@@ -226,9 +226,9 @@ int main( void )
             .pxTaskCode     = vTaskAperiodicSpawner,
             .pvParameters   = "SPAWN_APERIODIC",
             .usStackDepth   = configMINIMAL_STACK_SIZE * 2,
-            .uxPriority     = 1,
-            .xPeriod        = 100,      
-            .xDeadline      = 100,
+            .uxPriority     = tskIDLE_PRIORITY + 2,
+            .xPeriod        = 1000,      
+            .xDeadline      = 1000,
             .xTaskPolicy    = POLICY_SKIP 
         }
     };
@@ -254,7 +254,7 @@ int main( void )
      * Deadline: 20 ticks
      * Priority: 1 (Background priority) 
      */
-    xCreatePollingServer( 20, 20, 1 );
+    xCreatePollingServer( 2000, 2000, tskIDLE_PRIORITY + 2);
 
     /* Configure and Start the Custom Scheduler */
     vConfigureScheduler( &myConfig );
