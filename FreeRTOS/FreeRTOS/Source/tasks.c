@@ -4030,14 +4030,14 @@ void vTaskStartScheduler( void )
 
                 if( pxTCB != NULL )
                 {
-                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
+                    vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, (void *)pxTCB->xDeadline );
                 }
             }
 
             if( pxCurrentTCB != NULL )
             {
                 /* LOG: log first task start */
-                vLoggerStore( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
+                vLoggerStore( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, (void *) pxCurrentTCB->xDeadline );
             }
         }
         #endif
@@ -5548,13 +5548,22 @@ BaseType_t xTaskIncrementTick( void )
                         else
                         {
                             /* FAILURE: Timeout or deadline miss. */
+                            
+                            /* LOG: log deadline miss*/
+                            vLoggerStore( "AperWorker", LOGGER_TASK_DEADLINE_MISS, (void *)pxJob->xRelativeDeadline );
                             if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
                             {
+                                /* LOG: log KILL policy */
+                                vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
+
                                 /* CONSTRAINT: Terminate the task immediately. */
                                 vTaskDelete( xWorkerHandle );
                             }
                             else
                             {
+                                /* LOG: log OVERRUN policy */
+                                vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_SKIP, 0);
+                                
                                 /* CONSTRAINT: Allow execution to continue (Overrun). */
                                 /* Wait indefinitely for the task to finish, effectively
                                 ignoring the deadline. */
@@ -5678,7 +5687,7 @@ BaseType_t xTaskIncrementTick( void )
                     pxTCB->xDeadline=pxConfig->xNextRelease+pxConfig->deadline;
 
                     /* LOG: Log that the task has been released (made Ready) */
-                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, pxTCB->xDeadline );
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, (void *) pxTCB->xDeadline );
                     
                     // schedule next release
                     pxConfig->xNextRelease += pxConfig->period;
@@ -5694,7 +5703,7 @@ BaseType_t xTaskIncrementTick( void )
                     /* OVERRUN: Task did not suspend itself in time */
 
                     /* LOG: Log the deadline miss */
-                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, pxTCB->xDeadline );
+                    vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_DEADLINE_MISS, (void *) pxTCB->xDeadline );
 
                     switch (pxConfig->overrunPolicy)
                     {
@@ -5980,7 +5989,7 @@ BaseType_t xTaskIncrementTick( void )
             /* LOG: Log that a task has started/resumed execution on the CPU */
             if ( pxCurrentTCB != NULL )
             {
-                vLoggerStoreFromISR( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, pxCurrentTCB->xDeadline );
+                vLoggerStoreFromISR( pxCurrentTCB->pcTaskName, LOGGER_TASK_START, (void *) pxCurrentTCB->xDeadline );
             }
             
             /* Macro to inject port specific behaviour immediately after
