@@ -187,6 +187,7 @@ int main( void )
 {
     /* Initialize Hardware */
     UART_init();
+    vLoggerInit(); 
     
     /* ----------------------------------------------------- */
     /* 1. Task Configuration                                 */
