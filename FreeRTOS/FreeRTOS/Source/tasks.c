@@ -392,7 +392,6 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
     StackType_t * pxStack;                      /**< Points to the start of the stack. */
     #if ( configNUMBER_OF_CORES > 1 )
         volatile BaseType_t xTaskRunState;      /**< Used to identify the core the task is running on, if the task is running. Otherwise, identifies the task's state - not running or yielding. */
-        UBaseType_t uxTaskAttributes;           /**< Task's attributes - currently used to identify the idle tasks. */
     #endif
     char pcTaskName[ configMAX_TASK_NAME_LEN ]; /**< Descriptive name given to the task when created.  Facilitates debugging only. */
 
@@ -5275,7 +5274,7 @@ BaseType_t xTaskIncrementTick( void )
             
 #if( configUSE_PERIODIC_SCHEDULER == 1)
 
-        /*-----------------------------------------------------------*/
+    /*-----------------------------------------------------------*/
     /* APERIODIC JOB STRUCTURES                                  */
     /*-----------------------------------------------------------*/
 
@@ -5291,6 +5290,8 @@ BaseType_t xTaskIncrementTick( void )
         * The Item Value is set to xReleaseTime to ensure the list 
         * is automatically sorted by arrival order. */
         ListItem_t xListItem; 
+
+        const char *pcName;
 
         /* The function to be executed by the Polling Server. */
         TaskFunction_t fn;
@@ -5370,6 +5371,7 @@ BaseType_t xTaskIncrementTick( void )
     /*-----------------------------------------------------------*/
 
     BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
+                                    const char * const pcName,
                                     void *pvParameters,
                                     TickType_t xSoftDeadline,
                                     BaseType_t xPolicy,
@@ -5400,6 +5402,7 @@ BaseType_t xTaskIncrementTick( void )
         /* Populate the job data. */
         pxNewJob->fn = pxTaskCode;
         pxNewJob->param = pvParameters;
+        pxNewJob->pcName = pcName;
         pxNewJob->xRelativeDeadline = xSoftDeadline;
         pxNewJob->xPolicy = ( AperiodicPolicy_t ) xPolicy;
         pxNewJob->ulTaskID = ulNextID++;
@@ -5510,7 +5513,7 @@ static void prvPollingServerFunction( void *pvParameters )
 
                     /* Spawn the worker task to execute the job function. */
                     if( xTaskCreate( prvAperiodicWorker,
-                                    "AperWorker",
+                                    pxJob->pcName,
                                     1024,
                                     ( void * ) &xWorkerArgs,
                                     uxTaskPriorityGet( NULL ),
@@ -5518,7 +5521,7 @@ static void prvPollingServerFunction( void *pvParameters )
                     {
                         /* Clear any pending notifications before blocking. */
                         ( void ) ulTaskNotifyTake( pdTRUE, 0 );
-
+                        vLoggerStore( pxJob->pcName, LOGGER_TASK_START, 0);
 
                         /* Calculate the exact time to wait before a deadline or budget expires. */
                         xRemainingDeadline = pxJob->xRelativeDeadline;
@@ -5530,7 +5533,7 @@ static void prvPollingServerFunction( void *pvParameters )
                         if( ulResult > 0 )
                         {
                             /* The worker completed successfully within all time constraints. */
-                            vLoggerStore( "AperWorker", LOGGER_TASK_END, 0);
+                            vLoggerStore( pxJob->pcName, LOGGER_TASK_END, 0);
                         }
                         else
                         {
@@ -5544,8 +5547,7 @@ static void prvPollingServerFunction( void *pvParameters )
                                 if( xWorkerHandle != NULL )
                                 {
                                     vTaskDelete( xWorkerHandle );
-                                    vLoggerStore( "AperWorker", LOGGER_TASK_END, 0);
-                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
+                                    vLoggerStore( pxJob->pcName, LOGGER_TASK_OVERRUN_KILL, 0);
                                 }
                                 vPortFree( pxJob );
                                 
@@ -5556,11 +5558,11 @@ static void prvPollingServerFunction( void *pvParameters )
                             /* Check if the aperiodic soft deadline was missed. */
                             if( ( xNow - xJobStartTime ) >= pxJob->xRelativeDeadline )
                             {
-                                vLoggerStore( "AperWorker", LOGGER_TASK_DEADLINE_MISS, (void *)pxJob->xRelativeDeadline );
+                                vLoggerStore( pxJob->pcName, LOGGER_TASK_DEADLINE_MISS, (void *)pxJob->xRelativeDeadline );
                                 
                                 if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
                                 {
-                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
+                                    vLoggerStore( pxJob->pcName, LOGGER_TASK_OVERRUN_KILL, 0);
                                     if( xWorkerHandle != NULL )
                                     {
                                         vTaskDelete( xWorkerHandle );
@@ -5568,7 +5570,7 @@ static void prvPollingServerFunction( void *pvParameters )
                                 }
                                 else
                                 {
-                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_SKIP, 0);
+                                    vLoggerStore( pxJob->pcName, LOGGER_TASK_OVERRUN_SKIP, 0);
                                     
                                     /* Policy is OVERRUN. Wait for the remaining server budget. */
                                     xRemainingBudget = xServerPeriod - ( xNow - xPeriodStartTime );
@@ -5593,6 +5595,7 @@ static void prvPollingServerFunction( void *pvParameters )
                     vPortFree( pxJob );
                 }
             }
+            
             vLoggerStore(pcTaskGetName( NULL ), LOGGER_TASK_END, 0);
             vLoggerStore(pcTaskGetName( NULL ), LOGGER_TASK_SUSPEND, 0);
             /* Suspend the server task until the external scheduler resumes it. */

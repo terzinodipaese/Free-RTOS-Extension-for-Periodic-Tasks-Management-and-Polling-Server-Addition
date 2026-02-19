@@ -170,7 +170,8 @@ void vTaskAperiodicSpawner( void *pvParameters )
 
     /* 2. Spawn the Aperiodic Task */
     /* Parameters: Function, Args, SoftDeadline, Policy, StartTime (Now) */
-    xTaskCreateAperiodic( vAperiodicJobCallback, 
+    xTaskCreateAperiodic( vAperiodicJobCallback,
+                          "Lavoro aperiodico nome random",
                           NULL, 
                           100, 
                           APERIODIC_POLICY_OVERRUN, 
