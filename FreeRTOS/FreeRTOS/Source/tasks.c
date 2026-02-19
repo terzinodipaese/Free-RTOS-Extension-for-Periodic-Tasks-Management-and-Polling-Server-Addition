@@ -5518,7 +5518,7 @@ static void prvPollingServerFunction( void *pvParameters )
                     {
                         /* Clear any pending notifications before blocking. */
                         ( void ) ulTaskNotifyTake( pdTRUE, 0 );
-                        vLoggerStore( "AperWorker", LOGGER_TASK_START, 0);
+
 
                         /* Calculate the exact time to wait before a deadline or budget expires. */
                         xRemainingDeadline = pxJob->xRelativeDeadline;
@@ -5530,6 +5530,7 @@ static void prvPollingServerFunction( void *pvParameters )
                         if( ulResult > 0 )
                         {
                             /* The worker completed successfully within all time constraints. */
+                            vLoggerStore( "AperWorker", LOGGER_TASK_END, 0);
                         }
                         else
                         {
@@ -5543,6 +5544,8 @@ static void prvPollingServerFunction( void *pvParameters )
                                 if( xWorkerHandle != NULL )
                                 {
                                     vTaskDelete( xWorkerHandle );
+                                    vLoggerStore( "AperWorker", LOGGER_TASK_END, 0);
+                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
                                 }
                                 vPortFree( pxJob );
                                 
@@ -5590,7 +5593,8 @@ static void prvPollingServerFunction( void *pvParameters )
                     vPortFree( pxJob );
                 }
             }
-
+            vLoggerStore(pcTaskGetName( NULL ), LOGGER_TASK_END, 0);
+            vLoggerStore(pcTaskGetName( NULL ), LOGGER_TASK_SUSPEND, 0);
             /* Suspend the server task until the external scheduler resumes it. */
             vTaskSuspend( NULL );
         }

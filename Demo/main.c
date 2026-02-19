@@ -170,7 +170,7 @@ void vTaskAperiodicSpawner( void *pvParameters )
 
     /* 2. Spawn the Aperiodic Task */
     /* Parameters: Function, Args, SoftDeadline, Policy, StartTime (Now) */
-    xTaskCreateAperiodic( vAperiodicLongJob, 
+    xTaskCreateAperiodic( vAperiodicJobCallback, 
                           NULL, 
                           100, 
                           APERIODIC_POLICY_OVERRUN, 
@@ -258,6 +258,12 @@ int main( void )
 
     /* Configure and Start the Custom Scheduler */
     vConfigureScheduler( &myConfig );
+
+    /*xTaskCreateAperiodic( vAperiodicJobCallback, 
+                          NULL,
+                          100, 
+                          APERIODIC_POLICY_OVERRUN, 
+                          5 );*/
 
     vTaskStartScheduler();
 

@@ -110,8 +110,7 @@ void vApplicationIdleHook(void){
     if(currentTick != lastTick){
        ulIdleTicks++; 
        lastTick = currentTick;
-    }
-    
+    } 
 }
 
 
@@ -161,31 +160,31 @@ void vLoggerPrint(void){
         switch(e->eEventType){
             case LOGGER_TASK_RELEASE:
                 snprintf(s,sizeof(s), 
-                        "[%6lu] %8s RELEASE\r\n",
+                        "[%6lu] %32s RELEASE\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
             case LOGGER_TASK_START:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s START\r\n",
+                        "[%6lu] %32s START\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
             case LOGGER_TASK_END:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s COMPLETE\r\n",
+                        "[%6lu] %32s COMPLETE\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
             case LOGGER_TASK_SUSPEND:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s SUSPEND\r\n",
+                        "[%6lu] %32s SUSPEND\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
             case LOGGER_TASK_DEADLINE_MISS:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s DEADLINE_MISS (D=%lu @ tick %lu)\r\n",
+                        "[%6lu] %32s DEADLINE_MISS (D=%lu @ tick %lu)\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName,(unsigned long) e->pvValue,
                         (unsigned long) e->ulTimestamp);
@@ -194,20 +193,20 @@ void vLoggerPrint(void){
                
             case LOGGER_TASK_OVERRUN_SKIP:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s OVERRUN → SKIP\r\n",
+                        "[%6lu] %32s OVERRUN → SKIP\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
             case LOGGER_TASK_OVERRUN_KILL:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s OVERRUN → KILL\r\n",
+                        "[%6lu] %32s OVERRUN → KILL\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
 
             case LOGGER_TASK_OVERRUN_CATCH_UP:
                 snprintf(s,sizeof(s),
-                        "[%6lu] %8s OVERRUN → CATCH_UP\r\n",
+                        "[%6lu] %32s OVERRUN → CATCH_UP\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName);
                 break;
@@ -215,7 +214,7 @@ void vLoggerPrint(void){
             //added case for debug messages
             case LOGGER_DEBUG:
                 snprintf(s, sizeof(s),
-                        "[%6lu] %8s DEBUG: %s\r\n",
+                        "[%6lu] %32s DEBUG: %s\r\n",
                         (unsigned long) e->ulTimestamp,
                         e->pcTaskName,
                         (char *)e->pvValue); 
