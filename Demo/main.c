@@ -94,7 +94,7 @@ void vAperiodicLongJob( void *pvParameters )
     UART_printf( cBuffer );
 
     /* Simulate work equivalent to 500ms (approx). */
-    vBusyWait( 5000 );
+    vBusyWait( 10000 );
 
     /* Print the end time. */
     sprintf( cBuffer, "{%lu} Aperiodic Long Job: END\n",
@@ -123,7 +123,7 @@ void vTaskKillPolicyTest( void *pvParameters )
     UART_printf( s );
 
     /* 2. Simulate Work (Overrun) */
-    vBusyWait( 5000 );
+    vBusyWait( 50 );
     
     /* 3. END MSG */
     /* If Policy is KILL, this line should NEVER be reached. */
@@ -172,8 +172,8 @@ void vTaskAperiodicSpawner( void *pvParameters )
     /* Parameters: Function, Args, SoftDeadline, Policy, StartTime (Now) */
     xTaskCreateAperiodic( vAperiodicLongJob, 
                           NULL, 
-                          10, /* Short deadline */ 
-                          APERIODIC_POLICY_KILL, 
+                          100, 
+                          APERIODIC_POLICY_OVERRUN, 
                           xTaskGetTickCount() );
 
     UART_printf( "Spawner task: Request sent to Polling Server.\n" );

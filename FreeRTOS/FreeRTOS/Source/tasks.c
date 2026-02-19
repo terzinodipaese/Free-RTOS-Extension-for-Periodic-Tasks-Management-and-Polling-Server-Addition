@@ -1874,12 +1874,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
         BaseType_t xReturn = xTaskCreate(vPeriodicWrapperTask, pcName, uxStackDepth, cfg, uxPriority, &(cfg->pxTaskHandle));
 
-        // return xTaskCreate(vPeriodicWrapperTask,
-        //                 pcName,
-        //                 uxStackDepth,
-        //                 cfg,           /*Important! in this param also the pointer to the original function and it's param*/
-        //                 uxPriority,
-        //                 pxCreatedTask);
         if( xReturn == pdPASS )
         {
             cfg->xNextRelease = xTaskGetTickCount() + xPeriod;
@@ -4016,7 +4010,6 @@ void vTaskStartScheduler( void )
 
         #if ( configUSE_PERIODIC_SCHEDULER == 1 )
         {
-            /* LOG: the release of every periodic task at T=0. */
             ListItem_t * pxIterator;
             ListItem_t * const pxListEnd = listGET_END_MARKER( &pxPeriodicTasksList );
             
@@ -4030,6 +4023,7 @@ void vTaskStartScheduler( void )
 
                 if( pxTCB != NULL )
                 {
+                    /* LOG: the release of every periodic task at T=0. */
                     vLoggerStore( pxTCB->pcTaskName, LOGGER_TASK_RELEASE, (void *)pxTCB->xDeadline );
                 }
             }
@@ -5278,38 +5272,6 @@ BaseType_t xTaskIncrementTick( void )
 }
 /*-----------------------------------------------------------*/
 
-//TODO: Remove this part and set it in FreeRTOSConfig.h 
-#include <stdio.h> 
-#ifndef DBG_UART
-#define DBG_UART
-#include "uart.h"
-#endif
-#ifndef tracePOLLING_SERVER
-    #define tracePOLLING_SERVER() \
-        UART_printf("Polling server\n");
-    
-#endif
-
-#ifndef tracePOLLING_DEADLINEMISS1
-    #define tracePOLLING_DEADLINEMISS1(xJob) \
-		char a1[100]; \
-		sprintf(a1, "[POLLING SERVER] [ %lu ] taskId=%lu DEADLINE MISS -> Policy: %d\n", \
-					xTaskGetTickCount(), \
-					xJob.ulTaskID, \
-					xJob.xPolicy); \
-		UART_printf(a1);
-#endif
-
-#ifndef tracePOLLING_DEADLINEMISS2
-    #define tracePOLLING_DEADLINEMISS2(xJob) \
-		char a2[100]; \
-		sprintf(a2, "[POLLING SERVER] [ %lu ] taskId=%lu DEADLINE MISS -> Policy: %d\n", \
-					xTaskGetTickCount(), \
-					xJob.ulTaskID, \
-					xJob.xPolicy); \
-		UART_printf(a2);
-#endif
-
             
 #if( configUSE_PERIODIC_SCHEDULER == 1)
 
@@ -5462,7 +5424,7 @@ BaseType_t xTaskIncrementTick( void )
     }
     /*-----------------------------------------------------------*/
 
-    static void prvPollingServerFunction( void *pvParameters )
+static void prvPollingServerFunction( void *pvParameters )
     {
         TickType_t xNow;
         AperiodicJob_t *pxJob;
@@ -5471,10 +5433,18 @@ BaseType_t xTaskIncrementTick( void )
         uint32_t ulResult;
         ListItem_t *pxHeadItem;
         TickType_t xNextReleaseTime;
+        
+        /* The predefined period and budget of the polling server. */
+        const TickType_t xServerPeriod = xTaskGetPeriod(NULL); 
+        TickType_t xPeriodStartTime;
+        TickType_t xJobStartTime;
+        TickType_t xRemainingBudget;
+        TickType_t xRemainingDeadline;
+        TickType_t xWaitTime;
 
         ( void ) pvParameters;
 
-        /* Ensure the list is initialized (in case no tasks were created yet). */
+        /* Ensure the wait list is initialized before processing jobs. */
         if( xListInitialized == pdFALSE )
         {
             vListInitialise( &xAperiodicJobWaitList );
@@ -5483,34 +5453,46 @@ BaseType_t xTaskIncrementTick( void )
 
         for( ;; )
         {
-            /* Loop continuously through the jobs. */
+            /* Record the start time of the current period to track budget consumption. */
+            xPeriodStartTime = xTaskGetTickCount();
+
+            /* Loop continuously to process pending jobs within the current period. */
             while( 1 )
             {
                 xNow = xTaskGetTickCount();
+                
+                /* Evaluate if the server period has ended. */
+                if( ( xNow - xPeriodStartTime ) >= xServerPeriod )
+                {
+                    /* The budget is exhausted. Break to suspend the server. */
+                    break; 
+                }
+                xRemainingBudget = xServerPeriod - ( xNow - xPeriodStartTime );
+
                 pxJob = NULL;
 
-                /* Verify if the list is empty or if the next job is ready. */
+                /* Safely check the wait list for ready jobs. */
                 taskENTER_CRITICAL();
                 {
                     if( listLIST_IS_EMPTY( &xAperiodicJobWaitList ) )
                     {
                         taskEXIT_CRITICAL();
-                        /* The list is empty, suspend the server. */
+                        /* No jobs are pending. Break to suspend the server. */
                         break;
                     }
 
-                    /* Peek at the head of the list (Earliest Start Time). */
+                    /* Retrieve the earliest job from the sorted list. */
                     pxHeadItem = listGET_HEAD_ENTRY( &xAperiodicJobWaitList );
                     xNextReleaseTime = listGET_LIST_ITEM_VALUE( pxHeadItem );
 
                     if( xNow < xNextReleaseTime )
                     {
-                        /* The job is scheduled for the future. Stop processing. */
+                        /* The earliest job is not yet ready to run. */
                         taskEXIT_CRITICAL();
                         break;
                     }
 
-                    /* The job is ready. Remove it from the list. */
+                    /* Extract the job from the wait list. */
                     ( void ) uxListRemove( pxHeadItem );
                     pxJob = ( AperiodicJob_t * ) listGET_LIST_ITEM_OWNER( pxHeadItem );
                 }
@@ -5518,15 +5500,15 @@ BaseType_t xTaskIncrementTick( void )
 
                 if( pxJob != NULL )
                 {
-                    /* Prepare the worker arguments. */
+                    /* Initialize arguments for the worker task. */
                     xWorkerArgs.fn = pxJob->fn;
                     xWorkerArgs.param = pxJob->param;
                     xWorkerArgs.xServerHandle = xTaskGetCurrentTaskHandle();
 
                     xWorkerHandle = NULL;
+                    xJobStartTime = xTaskGetTickCount();
 
-                    /* Spawn the worker task.
-                    Note: The priority is set dynamically to match the server. */
+                    /* Spawn the worker task to execute the job function. */
                     if( xTaskCreate( prvAperiodicWorker,
                                     "AperWorker",
                                     1024,
@@ -5534,53 +5516,86 @@ BaseType_t xTaskIncrementTick( void )
                                     uxTaskPriorityGet( NULL ),
                                     &xWorkerHandle ) == pdPASS )
                     {
-                        /* Clear any existing notifications. */
+                        /* Clear any pending notifications before blocking. */
                         ( void ) ulTaskNotifyTake( pdTRUE, 0 );
+                        vLoggerStore( "AperWorker", LOGGER_TASK_START, 0);
 
-                        /* Wait for the deadline duration. */
-                        ulResult = ulTaskNotifyTake( pdTRUE, pxJob->xRelativeDeadline );
+                        /* Calculate the exact time to wait before a deadline or budget expires. */
+                        xRemainingDeadline = pxJob->xRelativeDeadline;
+                        xWaitTime = ( xRemainingBudget < xRemainingDeadline ) ? xRemainingBudget : xRemainingDeadline;
+
+                        /* Block the server until the worker finishes or a timeout occurs. */
+                        ulResult = ulTaskNotifyTake( pdTRUE, xWaitTime );
 
                         if( ulResult > 0 )
                         {
-                            /* SUCCESS: The task finished before the deadline.
-                            The worker task will delete itself. */
+                            /* The worker completed successfully within all time constraints. */
                         }
                         else
                         {
-                            /* FAILURE: Timeout or deadline miss. */
+                            /* A timeout occurred. Determine if it was the period or the deadline. */
+                            xNow = xTaskGetTickCount();
                             
-                            /* LOG: log deadline miss*/
-                            vLoggerStore( "AperWorker", LOGGER_TASK_DEADLINE_MISS, (void *)pxJob->xRelativeDeadline );
-                            if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
-                            {
-                                /* LOG: log KILL policy */
-                                vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
-
-                                /* CONSTRAINT: Terminate the task immediately. */
-                                vTaskDelete( xWorkerHandle );
-                            }
-                            else
-                            {
-                                /* LOG: log OVERRUN policy */
-                                vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_SKIP, 0);
+                            /* Check if the server period has fully elapsed. */
+                            if( ( xNow - xPeriodStartTime ) >= xServerPeriod )
+                            {                                
+                                /* Terminate the active worker task immediately. */
+                                if( xWorkerHandle != NULL )
+                                {
+                                    vTaskDelete( xWorkerHandle );
+                                }
+                                vPortFree( pxJob );
                                 
-                                /* CONSTRAINT: Allow execution to continue (Overrun). */
-                                /* Wait indefinitely for the task to finish, effectively
-                                ignoring the deadline. */
-                                ( void ) ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+                                /* Break the job loop to suspend the server. */
+                                break; 
+                            }
+                            
+                            /* Check if the aperiodic soft deadline was missed. */
+                            if( ( xNow - xJobStartTime ) >= pxJob->xRelativeDeadline )
+                            {
+                                vLoggerStore( "AperWorker", LOGGER_TASK_DEADLINE_MISS, (void *)pxJob->xRelativeDeadline );
+                                
+                                if( pxJob->xPolicy == APERIODIC_POLICY_KILL )
+                                {
+                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_KILL, 0);
+                                    if( xWorkerHandle != NULL )
+                                    {
+                                        vTaskDelete( xWorkerHandle );
+                                    }
+                                }
+                                else
+                                {
+                                    vLoggerStore( "AperWorker", LOGGER_TASK_OVERRUN_SKIP, 0);
+                                    
+                                    /* Policy is OVERRUN. Wait for the remaining server budget. */
+                                    xRemainingBudget = xServerPeriod - ( xNow - xPeriodStartTime );
+                                    ulResult = ulTaskNotifyTake( pdTRUE, xRemainingBudget );
+                                    
+                                    /* If the notification times out again, the budget has expired. */
+                                    if( ulResult == 0 )
+                                    {                                        
+                                        if( xWorkerHandle != NULL )
+                                        {
+                                            vTaskDelete( xWorkerHandle );
+                                        }
+                                        vPortFree( pxJob );
+                                        break; 
+                                    }
+                                }
                             }
                         }
                     }
 
-                    /* Free the job structure memory. */
+                    /* Release the memory allocated for the job. */
                     vPortFree( pxJob );
                 }
             }
 
-            /* Suspend until the next period. */
+            /* Suspend the server task until the external scheduler resumes it. */
             vTaskSuspend( NULL );
         }
     }
+
     /*-----------------------------------------------------------*/
 
     BaseType_t xCreatePollingServer( TickType_t xPeriod,
@@ -5599,7 +5614,7 @@ BaseType_t xTaskIncrementTick( void )
                                     xDeadline,
                                     uxPriority,
                                     &xPollingServerHandle,
-                                    POLICY_SKIP );
+                                    POLICY_KILL );
 
         return xReturn;
     }
@@ -5730,13 +5745,16 @@ BaseType_t xTaskIncrementTick( void )
                     switch (pxConfig->overrunPolicy)
                     {
                         case POLICY_SKIP:
+                            /*LOG: policy SKIP*/
                             vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_SKIP, 0 );
                             pxConfig->xNextRelease += pxConfig->period; /* Skip current activation */
                             break;
                         case POLICY_CATCH_UP:
+                            /*LOG: policy SKIP*/
                             pxConfig->xNextRelease += pxConfig->period;
                             break;
                         case POLICY_KILL:
+                            /*LOG: policy KILL*/
                             vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_KILL, 0 );
                             prvHardResetTask(pxTCB, pxConfig);
                             pxConfig->xNextRelease += pxConfig->period;
