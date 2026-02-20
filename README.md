@@ -1,96 +1,158 @@
-# Lab3.1 FreeRTOS Tasks Creation
+# Periodic Task Scheduler API Documentation -- Free RTOS extension
+
+This document provides an overview of the functions used to manage periodic tasks, scheduling policies, and logging utilities
+
+---
+
+## Table of Contents
+1. [vPeriodicWrapperTask](#vperiodicwrappertask)
+2. [xTaskCreatePeriodic](#xtaskcreateperiodic)
+3. [prvProcessPeriodicTasks](#prvprocessperiodictasks)
+4. [prvUpdateNextPeriodicEventTick](#prvupdatenextperiodiceventtick)
+5. [xTaskGetPeriod](#xtaskgetperiod)
+6. [xTaskGetDeadline](#xtaskgetdeadline)
+7. [vConfigureScheduler](#vconfigurescheduler)
+8. [vBusyWait](#vbusywait)
+9. [prvHardResetTask](#prvhardresettask)
+10. [vLoggerInit](#vloggerinit)
+11. [vLoggerStore](#vloggerstore)
+12. [vLoggerPrint](#vloggerprint)
+13. [vLoggerTask](#vloggertask)
+14. [xTaskCreateAperiodic](#xtaskcreateaperiodic)
+15. [prvPollingServerFunction](#prvpollingserverfunction)
+16. [xCreatePollingServer](#xcreatepollingserver)
+17. [prvAperiodicWorker](#prvaperiodicworker)
+18. [vLoggerStoreFromISR](#vloggerstorefromisr)
+
+---
+
+## Task Management API Functions
+
+#### vPeriodicWrapperTask
+> *Description*: A static wrapper function used to simulate the lifecycle and execution of a periodic task
+```c
+static void vPeriodicWrapperTask(void *pvParameters);
+```
+
+#### xTaskCreatePeriodic
+> *Description*: extended version of xTaskCreate(), accepts also deadline and priority as TickType_t
+```c
+BaseType_t xTaskCreatePeriodic(TaskFunction_t pxTaskCode,
+                                const char * const pcName,
+                                const configSTACK_DEPTH_TYPE uxStackDepth,
+                                void * const pvParameters,
+                                TickType_t xPeriod,
+                                TickType_t xDeadline,
+                                UBaseType_t uxPriority,
+                                TaskHandle_t * const pxCreatedTask,
+                                OverrunPolicy_t xTaskPolicy);
+```
+
+#### prvProcessPeriodicTasks
+> *Description*: picks and execute the next available periodic task, return true if the released task has higher priority, so we must yield later
+```c
+static BaseType_t prvProcessPeriodicTasks(const TickType_t xTickCount) PRIVILEGED_FUNCTION;
+```
+
+#### prvUpdateNextPeriodicEventTick
+> *Description*: goes through the periodic tasks list and update the next periodic event tick
+```c
+static void prvUpdateNextPeriodicEventTick(void) PRIVILEGED_FUNCTION;
+```
+
+#### xTaskGetPeriod
+> *Description*: to get the period of a periodic task
+```c
+TickType_t xTaskGetPeriod(TaskHandle_t xTask);
+```
+
+#### xTaskGetDeadline
+> *Description*: to get the deadline of a periodic task
+```c
+TickType_t xTaskGetDeadline(TaskHandle_t xTask);
+```
+
+#### vConfigureScheduler
+> *Description*: set global policy and call xTaskCreatePeriodic to manage tasks
+```c
+void vConfigureScheduler(SchedulerConfig_t *pxCfg);
+```
+
+#### vBusyWait
+> *Description*: do busy waiting for a time equal to ticks_simulated
+```c
+void vBusyWait(int ticks_simulated);
+```
+
+#### prvHardResetTask
+> *Description*: executed in case the kill policy has to be applied
+```c
+static void prvHardResetTask(TCB_t *pxTCB, PeriodicWrap_t *pxConfig);
+```
+
+#### vLoggerInit
+> *Description*: initialize the logger task
+```c
+void vLoggerInit(void);
+```
+
+#### vLoggerStore
+> *Description*: store logger messages in a buffer
+```c
+void vLoggerStore(const char* pcTaskName, LoggerEventType_t eEventType, TickType_t ulValue);
+```
+
+#### vLoggerPrint
+> *Description*: print logger messages
+```c
+void vLoggerPrint(void);
+```
+
+#### vLoggerTask
+> *Description*: implement the logger task
+```c
+void vLoggerTask(void *pvParameters);
+```
+
+#### xTaskCreateAperiodic
+> *Description*: API function to create an aperiodic task, managed by the polling server
+```c
+BaseType_t xTaskCreateAperiodic( TaskFunction_t pxTaskCode,
+                                    const char * const pcName,
+                                    void *pvParameters,
+                                    TickType_t xSoftDeadline,
+                                    BaseType_t xPolicy,
+                                    TickType_t xStartReleaseTime );
+```
+
+#### prvPollingServerFunction
+> *Description*: implement the polling server functionality
+```c
+static void prvPollingServerFunction(void *pvParameters);
+```
+
+#### xCreatePollingServer
+> *Description*: instantiate the polling server as a task
+```c
+BaseType_t xCreatePollingServer(TickType_t xPeriod, 
+                                 TickType_t xDeadline, 
+                                 UBaseType_t uxPriority);
+
+```
+
+#### prvAperiodicWorker
+> *Description*: execute the aperiodic task function and notify the polling server that we are done
+```c
+static void prvAperiodicWorker(void *pvParameters);
+
+```
+
+#### vLoggerStoreFromISR
+> *Description*: version of vLoggerStore for ISR contexts
+```c
+void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, void *pvValue);
+
+```
 
 
-## Getting started
-
-Scope: learn to create, schedule, pause, and destroy tasks in FreeRTOS.
-
-You will practice:
-
-* Creating one-shot and periodic tasks (`xTaskCreate`, `vTaskDelete`)
-* Time management with vTaskDelay and vTaskDelayUntil
-* Controlling CPU usage and avoiding drift
-* Priorities and preemption effects
-* Suspending and resuming tasks (`vTaskSuspend`, `vTaskResume`)
-* Dynamic task lifecycles (spawn/cleanup patterns)
-
-
-## Exercise 1 - One-shot “Hello” task (self-delete)
-
-Create a task that runs once, prints a message with its name and the stack available space, then deletes itself.
-
-Requirements
-
-* Create a task HelloTask with priority `tskIDLE_PRIORITY + 1`
-* Inside the task printi its name and available stack using `pcTaskGetName` and `uxTaskGetStackHighWaterMark` system calls
-* After printing, call `vTaskDelete`;
-* Main should continue running (scheduler and Idle task active)
-
-Look at the documentation of the system calls to become familiar with them. Experiment by changing the stack size.
-
-
-## Exercise 2 – Two periodic tasks with vTaskDelay (baseline)
-
-Create two periodic tasks at the same priority that print their tick timestamps at 500 ms and 200 ms periods using `vTaskDelay`.
-
-Requirements
-
-* Blink500 task: `vTaskDelay(pdMS_TO_TICKS(500))` loop
-* Blink200 task: `vTaskDelay(pdMS_TO_TICKS(200))` loop
-* Show interleaved prints (note possible drift due to work time + delay)
-
-This solution is drift prone. If the internal loop performs long operations the timing might be wrong. Try to generate this situation using busy waiting delays.
-
-## Exercise 3 – Periodic tasks with vTaskDelayUntil (no drift)
-
-Repeat Exercise 2 using vTaskDelayUntil to avoid drift.
-
-Requirements
-
-* Use an `TickType_t last = xTaskGetTickCount();`
-* Replace vTaskDelay() with `vTaskDelayUntil(&last, periodTicks);`
-* Show more regular timestamps (bounded jitter from preemption only)
-
-## Exercise 4 – Priority & preemption experiment
-
-Observe how priorities affect CPU sharing.
-
-Requirements
-
-* Task A (high priority = IDLE+3): busy loops for ~5 ms (simulate with for-loop or `small delay_ms(5))`, then `vTaskDelay(1)`
-* Task B (low priority = IDLE+1): same behavior
-* Run first with no `vTaskDelay()` in the high-prio loop and observe starvation
-* Add `vTaskDelay(1)` and observe improved fairness
-
-
-## Exercise 5 – Suspend & resume a worker task
-
-A controller task periodically suspends and resumes a worker task.
-
-Requirements:
-
-*	Worker prints a counter every 100 ms
-*	Controller waits 1 s, calls `vTaskSuspend(workerHandle`), waits 1 s, calls `vTaskResume(workerHandle)`, repeat
-
-## Exercise 6 – Dynamic task spawner (bounded pool)
-
-A spawner task periodically creates short-lived worker tasks that self-delete after N prints. Limit the max concurrent workers to 3.
-
-Hints:
-
-*	Keep a simple volatile uint8_t activeCount
-*	Increment before creating (or immediately after), decrement in worker just before delete
-*	If activeCount >= 3, the spawner just waits and retries later (polling via delay)
-
-
-## Exercise 7 – Phased periodic schedule (phase offsets)
-
-Start three periodic tasks with the same period (e.g., 1000 ms) but different phase offsets (0 ms, 250 ms, 500 ms). Use vTaskDelayUntil and an initial startup delay to align phases.
-
-Requirements
-
-* T0: phase 0 ms
-* T1: first `vTaskDelay(pdMS_TO_TICKS(250))` then enter `vTaskDelayUntil(&last, 1000)`
-* T2: first `vTaskDelay(pdMS_TO_TICKS(500))` then enter `vTaskDelayUntil(&last, 1000)`
-* Show that prints are interleaved at 250 ms offsets
 
