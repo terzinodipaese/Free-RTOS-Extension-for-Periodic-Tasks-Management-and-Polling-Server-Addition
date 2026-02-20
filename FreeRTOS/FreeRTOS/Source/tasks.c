@@ -5511,7 +5511,7 @@ static void prvPollingServerFunction( void *pvParameters )
                     {
                         /* Clear any pending notifications before blocking. */
                         ( void ) ulTaskNotifyTake( pdTRUE, 0 );
-                        vLoggerStore( pxJob->pcName, LOGGER_TASK_START, 0);
+                        /* vLoggerStore( pxJob->pcName, LOGGER_TASK_START, 0); */
 
                         /* Calculate the exact time to wait before a deadline or budget expires. */
                         xRemainingDeadline = pxJob->xRelativeDeadline;
@@ -5531,13 +5531,13 @@ static void prvPollingServerFunction( void *pvParameters )
                             xNow = xTaskGetTickCount();
                             
                             /* Check if the server period has fully elapsed. */
-                            if( ( xNow - xPeriodStartTime ) >= xServerPeriod )
+                            if( ( xNow - xPeriodStartTime ) >= xServerPeriod)
                             {                                
                                 /* Terminate the active worker task immediately. */
                                 if( xWorkerHandle != NULL )
                                 {
-                                    vTaskDelete( xWorkerHandle );
                                     vLoggerStore( pxJob->pcName, LOGGER_TASK_OVERRUN_KILL, 0);
+                                    vTaskDelete( xWorkerHandle );
                                 }
                                 vPortFree( pxJob );
                                 
