@@ -5701,7 +5701,7 @@ static void prvPollingServerFunction( void *pvParameters )
                     }
                 }
                 /* Reset deadline check for this job cycle */
-                pxConfig->xNextDeadline = portMAX_DELAY;
+                pxConfig->xNextDeadline = pxConfig->xNextRelease + pxConfig->deadline;
             }
 
             /* --- 2. RELEASE MONITORING (R_k) --- */

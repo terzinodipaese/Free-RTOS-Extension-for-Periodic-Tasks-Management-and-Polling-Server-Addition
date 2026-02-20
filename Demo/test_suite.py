@@ -3,6 +3,8 @@ import subprocess
 import time
 import re
 import shutil
+import sys
+import argparse
 
 # --- Terminal color helpers ---
 # Enable/disable color output easily (useful for CI or non-TTY environments)
@@ -344,35 +346,44 @@ def calculate_stats(logs, tasks_info):
         
     return stats, total_sim_ticks
 
-def run_test(test_name, conf, validator):
+def run_test(test_name, conf, validator=None, print_only=False):
     print(f"--- {test_name} ---")
     print("  Generating...", end="")
     generate_main_c(conf)
     print(" Compiling...", end="")
     if not run_build(): return
     print(" Running...", end="")
-    
-    logs_events, logs_raw = parse_logs(run_simulation(3.5)) 
+
+    logs_events, logs_raw = parse_logs(run_simulation(3.5))
     print(" Done.")
-    
+
     stats, total_ticks = calculate_stats(logs_events, conf["tasks"])
-    passed, msg = validator(logs_events, stats, logs_raw, total_ticks)
-    
-    status_label = colorize("[PASS]", COLOR_GREEN) if passed else colorize("[FAIL]", COLOR_RED)
+
+    # If print_only or no validator provided, skip validation and just print logs
+    if print_only or validator is None:
+        print("  RAW LOGS:")
+        print(logs_raw)
+        status_label = colorize("[RAW]", COLOR_YELLOW)
+        msg = "Printed logs only (no validation)."
+    else:
+        passed, msg = validator(logs_events, stats, logs_raw, total_ticks)
+        status_label = colorize("[PASS]", COLOR_GREEN) if passed else colorize("[FAIL]", COLOR_RED)
+
     print(f"  RESULT: {status_label} {msg}")
-    
+
     if stats:
         print(f"  STATS (Sim Duration: {total_ticks} ticks):")
         total_cpu = 0
         for t, s in stats.items():
             cpu_pct = (s['est_runtime'] / total_ticks) * 100.0
-            if cpu_pct > 100.0: cpu_pct = 100.0
+            if cpu_pct > 100.0:
+                cpu_pct = 100.0
             total_cpu += cpu_pct
             print(f"    {t}: Est.CPU={cpu_pct:.1f}%, Misses={s['misses']}")
-        
+
         if "Overhead" in test_name:
-             print(f"    TOTAL CPU Used by Tasks: {total_cpu:.1f}%")
-             print(f"    ESTIMATED IDLE TIME: {100.0 - total_cpu:.1f}%")
+            print(f"    TOTAL CPU Used by Tasks: {total_cpu:.1f}%")
+            print(f"    ESTIMATED IDLE TIME: {100.0 - total_cpu:.1f}%")
     print("")
 
 # --- 3. Validators ---
@@ -452,90 +463,121 @@ def val_overhead(logs, stats, raw, total_ticks):
 if __name__ == "__main__":
     try:
         backup_main()
-        
+
+        # Build a registry of tests: (id, name, config, validator)
+        tests = []
+
         # 1. Stress Test
         builder1 = TestCaseBuilder().set_scale(30000)
         for i in range(1, 9):
             builder1.addPeriodic(f"T{i}", "tskIDLE_PRIORITY+3", i*10, i*10, "POLICY_SKIP", 2)
-        run_test("1. StressTest_OverlappingHRT", builder1.build(), val_stress)
+        tests.append((1, "1. StressTest_OverlappingHRT", builder1.build(), val_stress))
 
         # 2. Minimal Gap - Workload 1
         builder2 = TestCaseBuilder().set_scale(30000)
         builder2.addPeriodic("TA", "tskIDLE_PRIORITY+2", 10, 10, "POLICY_SKIP", 1)
         builder2.addPeriodic("TB", "tskIDLE_PRIORITY+2", 11, 11, "POLICY_SKIP", 1)
-        run_test("2. TestEdge_MinimalTimeGap", builder2.build(), val_stress)
+        tests.append((2, "2. TestEdge_MinimalTimeGap", builder2.build(), val_stress))
 
         # 3. Preemption
         builder3 = TestCaseBuilder().set_scale(30000)
         builder3.addPeriodic("T_LOW", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 20)
         builder3.addPeriodic("T_HIGH", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_SKIP", 5)
-        run_test("3. Test_PreemptionHigher", builder3.build(), val_preemption)
+        tests.append((3, "3. Test_PreemptionHigher", builder3.build(), val_preemption))
 
         # 4. Jitter
         builder4 = TestCaseBuilder().set_scale(30000)
         builder4.addPeriodic("J0", "tskIDLE_PRIORITY+2", 20, 20, "POLICY_SKIP", 1)
-        run_test("4. Test_ReleaseJitter", builder4.build(), val_jitter)
+        tests.append((4, "4. Test_ReleaseJitter", builder4.build(), val_jitter))
 
         # 5. Deadline Miss
         builder5 = TestCaseBuilder().set_scale(500000)
         builder5.addPeriodic("DM", "tskIDLE_PRIORITY+3", 10, 10, "POLICY_SKIP", 200)
-        run_test("5. Test_DeadlineMiss", builder5.build(), val_deadline_miss)
+        tests.append((5, "5. Test_DeadlineMiss", builder5.build(), val_deadline_miss))
 
         # 6. Policy SKIP
         builder6 = TestCaseBuilder().set_scale(500000)
         builder6.addPeriodic("Skip", "tskIDLE_PRIORITY+2", 10, 10, "POLICY_SKIP", 200)
-        run_test("6. Test_OverrunPolicy_SKIP", builder6.build(), val_policy_skip)
+        tests.append((6, "6. Test_OverrunPolicy_SKIP", builder6.build(), val_policy_skip))
 
         # 7. Policy KILL
         builder7 = TestCaseBuilder().set_scale(500000)
         builder7.addPeriodic("Kill", "tskIDLE_PRIORITY+2", 20, 20, "POLICY_KILL", 200)
-        run_test("7. Test_OverrunPolicy_KILL", builder7.build(), val_policy_kill)
+        tests.append((7, "7. Test_OverrunPolicy_KILL", builder7.build(), val_policy_kill))
 
         # 8. Policy CATCH_UP - Workload 40, Prio 0
         builder8 = TestCaseBuilder().set_scale(30000)
         builder8.addPeriodic("Catch", "tskIDLE_PRIORITY", 20, 20, "POLICY_CATCH_UP", 40, stack="configMINIMAL_STACK_SIZE * 8")
-        run_test("8. Test_OverrunPolicy_CATCH_UP", builder8.build(), val_policy_catchup)
+        tests.append((8, "8. Test_OverrunPolicy_CATCH_UP", builder8.build(), val_policy_catchup))
 
         # 9. Round Robin
         builder9 = TestCaseBuilder().set_scale(30000)
         builder9.addPeriodic("RR1", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 10)
         builder9.addPeriodic("RR2", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 10)
-        run_test("9. Test_RoundRobin", builder9.build(), val_rr)
+        tests.append((9, "9. Test_RoundRobin", builder9.build(), val_rr))
 
         # 11. Aperiodic Basic (fluent)
         builder11 = TestCaseBuilder().set_scale(30000).usePollingServer(50, 50, "tskIDLE_PRIORITY+3")
         builder11.addAperiodic(5, 30, "APERIODIC_POLICY_OVERRUN", delay_after_ms=10)
         builder11.addAperiodic(5, 30, "APERIODIC_POLICY_OVERRUN", delay_after_ms=10)
         builder11.addAperiodic(5, 30, "APERIODIC_POLICY_OVERRUN")
-        run_test("11. Test_AperiodicServer", builder11.build(), val_aper_basic)
+        tests.append((11, "11. Test_AperiodicServer", builder11.build(), val_aper_basic))
 
         # 12. Aperiodic Kill (fluent)
         builder12 = TestCaseBuilder().set_scale(50000).usePollingServer(50, 50, "tskIDLE_PRIORITY+3")
         builder12.addAperiodic(1500, 20, "APERIODIC_POLICY_KILL")
-        run_test("12. Test_AperiodicKill", builder12.build(), val_aper_kill)
+        tests.append((12, "12. Test_AperiodicKill", builder12.build(), val_aper_kill))
 
         # 13. Aperiodic Overrun (fluent)
         builder13 = TestCaseBuilder().set_scale(50000).usePollingServer(50, 50, "tskIDLE_PRIORITY+3")
         builder13.addAperiodic(1500, 20, "APERIODIC_POLICY_OVERRUN")
-        run_test("13. Test_AperiodicOverrun", builder13.build(), val_aper_overrun)
+        tests.append((13, "13. Test_AperiodicOverrun", builder13.build(), val_aper_overrun))
 
         # 14. Aperiodic Queue Full (fluent)
         builder14 = TestCaseBuilder().set_scale(30000).usePollingServer(5000, 5000, "tskIDLE_PRIORITY+3")
         builder14.addAperiodicLoopUntilFail(5000, 0, 50, "APERIODIC_POLICY_OVERRUN")
-        run_test("14. Test_AperiodicQueueFull", builder14.build(), val_aper_full)
+        tests.append((14, "14. Test_AperiodicQueueFull", builder14.build(), val_aper_full))
 
         # 15. Mixed (fluent)
         builder15 = TestCaseBuilder().set_scale(30000).usePollingServer(40, 40, "tskIDLE_PRIORITY+2")
         builder15.addPeriodic("PER_1", "tskIDLE_PRIORITY+4", 30, 30, "POLICY_SKIP", 5)
         builder15.addPeriodic("PER_2", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 5)
         builder15.addAperiodicRepeated(3, 5, 50, "APERIODIC_POLICY_OVERRUN", inter_delay_ms=60)
-        run_test("15. Test_AperiodicMixed", builder15.build(), val_aper_mixed)
+        tests.append((15, "15. Test_AperiodicMixed", builder15.build(), val_aper_mixed))
 
         # 16. System Overhead
         builder16 = TestCaseBuilder().set_scale(30000)
         for i in range(1, 9):
             builder16.addPeriodic(f"T{i}", "tskIDLE_PRIORITY+2", 200, 200, "POLICY_SKIP", 0)
-        run_test("16. Test_SystemOverhead", builder16.build(), val_overhead)
+        tests.append((16, "16. Test_SystemOverhead", builder16.build(), val_overhead))
+
+        builder17 = TestCaseBuilder().set_scale(50000)
+        # 17. Custom Test - User Defined (fluent)
+        builder17.set_global_policy("POLICY_CATCH_UP")
+        builder17.addPeriodic("Custom1", "tskIDLE_PRIORITY+3",1000,80, "POLICY_CATCH_UP", workload=500)
+        tests.append((17, "17. Test_Custom_CATCH_UP", builder17.build(), None))
+
+
+        # Argument parsing: allow selection of tests by number and a print-only flag
+        parser = argparse.ArgumentParser(description="Run selected tests from the test suite")
+        parser.add_argument('tests', nargs='*', type=int, help='Test numbers to run (e.g., 5 12 7)')
+        parser.add_argument('-p', '--print-only', action='store_true', help='Do not validate; just print raw logs')
+        args = parser.parse_args()
+
+        # Determine run order
+        if args.tests:
+            # Run tests in the order requested by the user
+            for tid in args.tests:
+                matched = [t for t in tests if t[0] == tid]
+                if not matched:
+                    print(f"Skipping unknown test id: {tid}")
+                    continue
+                _id, name, conf, validator = matched[0]
+                run_test(name, conf, validator if not args.print_only else None, print_only=args.print_only)
+        else:
+            # Run all tests in the registered order
+            for _id, name, conf, validator in tests:
+                run_test(name, conf, validator if not args.print_only else None, print_only=args.print_only)
 
     except KeyboardInterrupt:
         print("\nAborted.")
