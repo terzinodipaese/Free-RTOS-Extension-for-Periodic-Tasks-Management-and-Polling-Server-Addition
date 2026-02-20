@@ -475,19 +475,19 @@ if __name__ == "__main__":
 
         # 2. Minimal Gap - Workload 1
         builder2 = TestCaseBuilder().set_scale(30000)
-        builder2.addPeriodic("TA", "tskIDLE_PRIORITY+2", 10, 10, "POLICY_SKIP", 1)
-        builder2.addPeriodic("TB", "tskIDLE_PRIORITY+2", 11, 11, "POLICY_SKIP", 1)
+        builder2.addPeriodic("TA", "tskIDLE_PRIORITY+3", 10, 10, "POLICY_SKIP", 1)
+        builder2.addPeriodic("TB", "tskIDLE_PRIORITY+3", 11, 11, "POLICY_SKIP", 1)
         tests.append((2, "2. TestEdge_MinimalTimeGap", builder2.build(), val_stress))
 
         # 3. Preemption
         builder3 = TestCaseBuilder().set_scale(30000)
-        builder3.addPeriodic("T_LOW", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 20)
-        builder3.addPeriodic("T_HIGH", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_SKIP", 5)
+        builder3.addPeriodic("T_LOW", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 20)
+        builder3.addPeriodic("T_HIGH", "tskIDLE_PRIORITY+4", 20, 20, "POLICY_SKIP", 5)
         tests.append((3, "3. Test_PreemptionHigher", builder3.build(), val_preemption))
 
         # 4. Jitter
         builder4 = TestCaseBuilder().set_scale(30000)
-        builder4.addPeriodic("J0", "tskIDLE_PRIORITY+2", 20, 20, "POLICY_SKIP", 1)
+        builder4.addPeriodic("J0", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_SKIP", 1)
         tests.append((4, "4. Test_ReleaseJitter", builder4.build(), val_jitter))
 
         # 5. Deadline Miss
@@ -497,23 +497,23 @@ if __name__ == "__main__":
 
         # 6. Policy SKIP
         builder6 = TestCaseBuilder().set_scale(500000)
-        builder6.addPeriodic("Skip", "tskIDLE_PRIORITY+2", 10, 10, "POLICY_SKIP", 200)
+        builder6.addPeriodic("Skip", "tskIDLE_PRIORITY+3", 10, 10, "POLICY_SKIP", 200)
         tests.append((6, "6. Test_OverrunPolicy_SKIP", builder6.build(), val_policy_skip))
 
         # 7. Policy KILL
         builder7 = TestCaseBuilder().set_scale(500000)
-        builder7.addPeriodic("Kill", "tskIDLE_PRIORITY+2", 20, 20, "POLICY_KILL", 200)
+        builder7.addPeriodic("Kill", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_KILL", 200)
         tests.append((7, "7. Test_OverrunPolicy_KILL", builder7.build(), val_policy_kill))
 
         # 8. Policy CATCH_UP - Workload 40, Prio 0
-        builder8 = TestCaseBuilder().set_scale(30000)
-        builder8.addPeriodic("Catch", "tskIDLE_PRIORITY", 20, 20, "POLICY_CATCH_UP", 40, stack="configMINIMAL_STACK_SIZE * 8")
+        builder8 = TestCaseBuilder().set_scale(500000)
+        builder8.addPeriodic("Catch", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_CATCH_UP", 40, stack="configMINIMAL_STACK_SIZE * 8")
         tests.append((8, "8. Test_OverrunPolicy_CATCH_UP", builder8.build(), val_policy_catchup))
 
         # 9. Round Robin
         builder9 = TestCaseBuilder().set_scale(30000)
-        builder9.addPeriodic("RR1", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 10)
-        builder9.addPeriodic("RR2", "tskIDLE_PRIORITY+2", 50, 50, "POLICY_SKIP", 10)
+        builder9.addPeriodic("RR1", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 2000)
+        builder9.addPeriodic("RR2", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 2000)
         tests.append((9, "9. Test_RoundRobin", builder9.build(), val_rr))
 
         # 11. Aperiodic Basic (fluent)
@@ -548,7 +548,7 @@ if __name__ == "__main__":
         # 16. System Overhead
         builder16 = TestCaseBuilder().set_scale(30000)
         for i in range(1, 9):
-            builder16.addPeriodic(f"T{i}", "tskIDLE_PRIORITY+2", 200, 200, "POLICY_SKIP", 0)
+            builder16.addPeriodic(f"T{i}", "tskIDLE_PRIORITY+2", 200, 200, "POLICY_SKIP", 1) # 1 tick tasks
         tests.append((16, "16. Test_SystemOverhead", builder16.build(), val_overhead))
 
         builder17 = TestCaseBuilder().set_scale(50000)
