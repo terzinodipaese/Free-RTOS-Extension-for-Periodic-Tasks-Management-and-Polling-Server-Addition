@@ -5301,9 +5301,6 @@ BaseType_t xTaskIncrementTick( void )
 
         /* The behavior to apply if the deadline is missed (KILL or OVERRUN). */
         AperiodicPolicy_t xPolicy;
-
-        /* A unique identifier for logging and trace purposes. */
-        uint32_t ulTaskID;        
         
         /* The absolute time (in ticks) when this job becomes eligible to run. 
         * Before this time, the Polling Server will ignore it. */
@@ -5373,7 +5370,6 @@ BaseType_t xTaskIncrementTick( void )
                                     TickType_t xStartReleaseTime )
     {
         AperiodicJob_t *pxNewJob;
-        static uint32_t ulNextID = 1;
 
         /* Initialize the list on the first call. */
         taskENTER_CRITICAL();
@@ -5400,7 +5396,6 @@ BaseType_t xTaskIncrementTick( void )
         pxNewJob->pcName = pcName;
         pxNewJob->xRelativeDeadline = xSoftDeadline;
         pxNewJob->xPolicy = ( AperiodicPolicy_t ) xPolicy;
-        pxNewJob->ulTaskID = ulNextID++;
         pxNewJob->xReleaseTime = xStartReleaseTime;
 
         /* Prepare the list item for sorting. */
