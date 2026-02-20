@@ -103,17 +103,6 @@ void vLoggerStoreFromISR(const char* pcTaskName, LoggerEventType_t eEventType, v
 }
 
 
-static TickType_t lastTick = 0;
-
-void vApplicationIdleHook(void){
-    TickType_t currentTick = xTaskGetTickCount();
-    if(currentTick != lastTick){
-       ulIdleTicks++; 
-       lastTick = currentTick;
-    } 
-}
-
-
 void vLoggerPrint(void){
 
     static LoggerEntry_t xLocalBuffer[LOGGER_BUFFER_SIZE];
