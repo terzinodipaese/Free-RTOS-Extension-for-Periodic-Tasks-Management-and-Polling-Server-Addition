@@ -1783,13 +1783,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
     static void vPeriodicWrapperTask(void *pvParameters)
     {
         PeriodicWrap_t * pxCfg = ( PeriodicWrap_t * ) pvParameters;
-        //  vPortFree(pvParameters);                 // free small helper struct // we actually need this // TODO: remove if not needed
-
         for (;;)
         {
             pxCfg->fn( pxCfg->param );                      /*Call the original function with the original parameters */
-            // vTaskDelayUntil(&last, cfg.period);     /*Make it periodic */
-            
+
             /* LOG: Log that the job has finished execution */
             vLoggerStore( pcTaskGetName( pxCfg->pxTaskHandle ), LOGGER_TASK_END, pxCfg->deadline );   
 
@@ -1807,8 +1804,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                 }
             }
             taskEXIT_CRITICAL();
-
-           // vTaskSuspend(NULL); DA RIM                  
         }
     }
 
@@ -5719,12 +5714,6 @@ static void prvPollingServerFunction( void *pvParameters )
             {
                 if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
                 {
-                    /* SUCCESS PATH: Task ready for new period */
-                    if( pxConfig->overrunPolicy == POLICY_KILL )
-                    {
-                        prvHardResetTask( pxTCB, pxConfig );
-                    }
-
                     ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
 
@@ -5757,7 +5746,9 @@ static void prvPollingServerFunction( void *pvParameters )
                             pxConfig->xNextRelease += pxConfig->period; /* Skip current activation */
                             break;
                         case POLICY_CATCH_UP:
-                            /*LOG: policy SKIP*/
+                            /*LOG: policy CATCH_UP*/
+                            vLoggerStoreFromISR( pxTCB->pcTaskName, LOGGER_TASK_OVERRUN_CATCH_UP, 0 );
+                            pxConfig->ulPendingJobs++;
                             pxConfig->xNextRelease += pxConfig->period;
                             break;
                         case POLICY_KILL:
