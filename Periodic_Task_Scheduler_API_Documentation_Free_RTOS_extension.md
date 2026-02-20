@@ -23,6 +23,18 @@ This document provides an overview of the functions used to manage periodic task
 16. [xCreatePollingServer](#xcreatepollingserver)
 17. [prvAperiodicWorker](#prvaperiodicworker)
 18. [vLoggerStoreFromISR](#vloggerstorefromisr)
+19. [addPeriodic](#addperiodic)
+20. [usePollingServer](#usepollingserver)
+21. [addAperiodicRepeated](#addperiodicrepetead)
+22. [addAperiodicLoopUntilFail](#addperiodicloopuntilfail)
+23. [set_global_policy](#set_global_policy)
+24. [set_scale](#set_scale)
+25. [build](#build)
+26. [run_build](#run_build)
+27. [run_simulation](#run_simulation)
+28. [parse_logs](#parse_logs)
+29. [calculate_stats](#calculate_stats)
+30. [run_test](#run_test)
 
 ---
 
