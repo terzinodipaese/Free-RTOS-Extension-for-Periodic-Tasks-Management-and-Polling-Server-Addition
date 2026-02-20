@@ -3,6 +3,7 @@ import subprocess
 import time
 import re
 import shutil
+import statistics
 import sys
 import argparse
 
@@ -381,7 +382,27 @@ def run_test(test_name, conf, validator=None, print_only=False):
             total_cpu += cpu_pct
             print(f"    {t}: Est.CPU={cpu_pct:.1f}%, Misses={s['misses']}")
 
-        if "Overhead" in test_name:
+        # For jitter tests, print the variance of execution durations instead of CPU overhead
+        if "Jitter" in test_name:
+            # compute durations from START/COMPLETE events for task J0
+            j0_logs = [e for e in logs_events if e["task"] == "J0"]
+            durations = []
+            last_start = None
+            for e in sorted(j0_logs, key=lambda x: x["tick"]):
+                ev = e["event"]
+                if "START" in ev:
+                    last_start = e["tick"]
+                elif ("COMPLETE" in ev or "END" in ev) and last_start is not None:
+                    durations.append(e["tick"] - last_start)
+                    last_start = None
+
+            if durations:
+                var = statistics.pvariance(durations) if len(durations) > 1 else 0.0
+                print(f"    JITTER Variance (ticks): {var:.2f}")
+                print(f"    JITTER Samples: min={min(durations)}, max={max(durations)}, count={len(durations)}")
+            else:
+                print("    JITTER: insufficient data to compute variance")
+        elif "Overhead" in test_name:
             print(f"    TOTAL CPU Used by Tasks: {total_cpu:.1f}%")
             print(f"    ESTIMATED IDLE TIME: {100.0 - total_cpu:.1f}%")
     print("")
@@ -400,8 +421,33 @@ def val_preemption(logs, stats, raw, total_ticks):
     return False, "One task starved."
 
 def val_jitter(logs, stats, raw, total_ticks):
-    if stats["J0"]["misses"] == 0: return True, "Jitter OK."
-    return False, "Jitter caused miss."
+    # Jitter = variability in execution time of a task across activations.
+    # Extract START/COMPLETE pairs for task J0 and compute durations in ticks.
+    t_logs = [e for e in logs if e["task"] == "J0"]
+    if not t_logs:
+        return False, "No logs for J0"
+
+    durations = []
+    last_start = None
+    for e in sorted(t_logs, key=lambda x: x["tick"]):
+        ev = e["event"]
+        if "START" in ev:
+            last_start = e["tick"]
+        elif ("COMPLETE" in ev or "END" in ev) and last_start is not None:
+            durations.append(e["tick"] - last_start)
+            last_start = None
+
+    if len(durations) < 2:
+        return False, f"Insufficient start/complete pairs for J0 (found {len(durations)})"
+
+    min_d = min(durations)
+    max_d = max(durations)
+    variability = max_d - min_d
+
+    # Pass if variability within 2 ticks (configurable threshold)
+    if variability <= 2:
+        return True, f"Jitter OK (variability={variability} ticks)"
+    return False, f"Jitter too high (variability={variability} ticks)"
 
 def val_deadline_miss(logs, stats, raw, total_ticks):
     if stats["DM"]["misses"] > 0: return True, "Deadline Miss detected."
@@ -487,8 +533,8 @@ if __name__ == "__main__":
 
         # 4. Jitter
         builder4 = TestCaseBuilder().set_scale(30000)
-        builder4.addPeriodic("J0", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_SKIP", 1)
-        tests.append((4, "4. Test_ReleaseJitter", builder4.build(), val_jitter))
+        builder4.addPeriodic("J0", "tskIDLE_PRIORITY+3", 20, 20, "POLICY_SKIP", 2000)
+        tests.append((4, "4. Test_Jitter", builder4.build(), val_jitter))
 
         # 5. Deadline Miss
         builder5 = TestCaseBuilder().set_scale(500000)
@@ -512,8 +558,8 @@ if __name__ == "__main__":
 
         # 9. Round Robin
         builder9 = TestCaseBuilder().set_scale(30000)
-        builder9.addPeriodic("RR1", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 2000)
-        builder9.addPeriodic("RR2", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 2000)
+        builder9.addPeriodic("RR1", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 1000)
+        builder9.addPeriodic("RR2", "tskIDLE_PRIORITY+3", 50, 50, "POLICY_SKIP", 1000)
         tests.append((9, "9. Test_RoundRobin", builder9.build(), val_rr))
 
         # 11. Aperiodic Basic (fluent)
