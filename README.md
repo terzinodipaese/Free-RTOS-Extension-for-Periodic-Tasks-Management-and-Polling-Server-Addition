@@ -186,7 +186,7 @@ Test 4 – SRT Preemption: PASSED
 Create a high-level configuration framework (e.g., a Python script) that enables the user to describe the target problem, perform schedulability analysis (for algorithms that support it), and ultimately generate the FreeRTOS skeleton application.
 
 ## 📦 Deliverables
-1. ✅ Modified FreeRTOS kernel with timeline-based scheduler.  
+1. ✅ Modified FreeRTOS kernel embedding the requirements about periodic tasks and polling server functionalities.  
 2. ✅ Configuration data structure and system call for schedule definition.  
 3. ✅ Trace and monitoring system with tick-level resolution.  
 4. ✅ Automated test suite for validation and regression checking.  
