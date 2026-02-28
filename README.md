@@ -1,4 +1,4 @@
-## 🕒 Project First Part — Priority-Based Scheduler for Periodic Tasks in FreeRTOS
+## 🕒 Project Part One — Priority-Based Scheduler for Periodic Tasks in FreeRTOS
 
 > **Goal:** Add first-class periodic tasks (period + deadline) **on top of** the default FreeRTOS scheduler, preserving FreeRTOS’s preemptive, priority-based semantics.
 
@@ -93,7 +93,7 @@ Init(&cfg);
 Start(); // defines t₀; all tasks start together
 ```
 
-## 🕒 Project Second Part — Priority-Based Scheduler for Periodic Tasks with Polling Server in FreeRTOS
+## 🕒 Project Part Two — Priority-Based Scheduler for Periodic Tasks with Polling Server in FreeRTOS
 
 > **Goal:** Extend the periodic task scheduler developed in *Project 2* by adding a **polling server mechanism** to manage **aperiodic tasks** within a predictable real-time framework.
 
